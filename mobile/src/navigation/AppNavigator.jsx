@@ -1,0 +1,123 @@
+import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { Ionicons } from '@expo/vector-icons';
+import { useAuth } from '../context/AuthContext';
+import { getTabsForUser } from './roleTabs';
+import { colors } from '../theme';
+
+import DashboardScreen from '../screens/DashboardScreen';
+import AttendanceScreen from '../screens/AttendanceScreen';
+import WorkersScreen from '../screens/WorkersScreen';
+import WorkerProfileScreen from '../screens/WorkerProfileScreen';
+import WalletScreen from '../screens/WalletScreen';
+import FundRequestsScreen from '../screens/FundRequestsScreen';
+import TransactionsScreen from '../screens/TransactionsScreen';
+import PaySalaryScreen from '../screens/PaySalaryScreen';
+import DistributorHomeScreen from '../screens/DistributorHomeScreen';
+import ReportsScreen from '../screens/ReportsScreen';
+import ProfileScreen from '../screens/ProfileScreen';
+import MoreScreen from '../screens/MoreScreen';
+import SystemAdminScreen from '../screens/SystemAdminScreen';
+import DistributorsScreen from '../screens/DistributorsScreen';
+import SupervisorsScreen from '../screens/SupervisorsScreen';
+import ApiSettingsScreen from '../screens/ApiSettingsScreen';
+
+const Tab = createBottomTabNavigator();
+const Stack = createNativeStackNavigator();
+
+const screenMap = {
+  Dashboard: DashboardScreen,
+  Attendance: AttendanceScreen,
+  Workers: WorkersScreen,
+  FundRequests: FundRequestsScreen,
+  More: MoreScreen,
+  Wallet: WalletScreen,
+  PaySalary: PaySalaryScreen,
+  Transactions: TransactionsScreen,
+  DistributorHome: DistributorHomeScreen,
+  Reports: ReportsScreen,
+  Profile: ProfileScreen,
+  SystemAdmin: SystemAdminScreen,
+};
+
+function RoleTabs() {
+  const { user } = useAuth();
+  const tabs = getTabsForUser(user);
+
+  return (
+    <Tab.Navigator
+      screenOptions={{
+        headerShown: false,
+        tabBarActiveTintColor: colors.primary,
+        tabBarInactiveTintColor: colors.textMuted,
+        tabBarStyle: { paddingBottom: 4, height: 58 },
+      }}
+    >
+      {tabs.map((tab) => (
+        <Tab.Screen
+          key={tab.name}
+          name={tab.name}
+          component={screenMap[tab.name]}
+          options={{
+            title: tab.title,
+            tabBarIcon: ({ color, size }) => (
+              <Ionicons name={tab.icon} color={color} size={size} />
+            ),
+          }}
+        />
+      ))}
+    </Tab.Navigator>
+  );
+}
+
+export default function AppNavigator() {
+  return (
+    <Stack.Navigator>
+      <Stack.Screen
+        name="MainTabs"
+        component={RoleTabs}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="WorkerProfile"
+        component={WorkerProfileScreen}
+        options={{ title: 'Worker Profile' }}
+      />
+      <Stack.Screen
+        name="Distributors"
+        component={DistributorsScreen}
+        options={{ title: 'Distributors' }}
+      />
+      <Stack.Screen
+        name="Supervisors"
+        component={SupervisorsScreen}
+        options={{ title: 'Supervisors' }}
+      />
+      <Stack.Screen
+        name="Transactions"
+        component={TransactionsScreen}
+        options={{ title: 'Payments' }}
+      />
+      <Stack.Screen
+        name="Reports"
+        component={ReportsScreen}
+        options={{ title: 'Reports' }}
+      />
+      <Stack.Screen
+        name="PaySalary"
+        component={PaySalaryScreen}
+        options={{ title: 'Pay Salary' }}
+      />
+      <Stack.Screen
+        name="Profile"
+        component={ProfileScreen}
+        options={{ title: 'My Profile' }}
+      />
+      <Stack.Screen
+        name="ApiSettings"
+        component={ApiSettingsScreen}
+        options={{ title: 'API URL' }}
+      />
+    </Stack.Navigator>
+  );
+}

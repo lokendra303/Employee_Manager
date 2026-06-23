@@ -10,7 +10,9 @@
     "db:setup": "npm run db:setup --prefix server",
     "db:seed": "npm run db:seed --prefix server",
     "db:generate": "npm run db:generate --prefix server",
-    "install:all": "npm install && npm install --prefix server && npm install --prefix client"
+    "install:all": "npm install && npm install --prefix server && npm install --prefix client && npm install --prefix mobile",
+    "dev:mobile": "npm run start --prefix mobile",
+    "dev:all": "concurrently \"npm run dev --prefix server\" \"npm run dev --prefix client\" \"npm run start --prefix mobile\""
   },
   "devDependencies": {
     "concurrently": "^9.1.2"
