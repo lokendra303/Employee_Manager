@@ -1,0 +1,482 @@
+import { Router } from 'express';
+import { z } from 'zod';
+import prisma from '../lib/prisma.js';
+import { success, error } from '../lib/response.js';
+import { authenticate, requireRole, requireTenantUser } from '../middleware/auth.js';
+import { getDistributorForUser, assertFundRequestAccess } from '../services/access.js';
+import {
+  calculateDistributorPaymentDue,
+  calculateSupervisorPaymentDue,
+  verifyFundRequest,
+} from '../services/fundRequest.js';
+import { ensureWalletForUser, creditWallet } from '../services/wallet.js';
+import { createAuditLog } from '../services/audit.js';
+
+const router = Router();
+
+router.use(authenticate);
+router.use(requireTenantUser);
+
+async function resolveRequesterContext(user) {
+  if (user.role === 'DISTRIBUTOR') {
+    const distributor = await getDistributorForUser(user);
+    if (!distributor) return null;
+    const wallet = await ensureWalletForUser(user, distributor.id);
+    return {
+      requesterType: 'DISTRIBUTOR',
+      distributorId: distributor.id,
+      distributorName: distributor.name,
+      walletId: wallet.id,
+    };
+  }
+
+  if (user.role === 'SUPERVISOR') {
+    const wallet = await ensureWalletForUser(user);
+    return {
+      requesterType: 'SUPERVISOR',
+      distributorId: null,
+      distributorName: null,
+      walletId: wallet.id,
+    };
+  }
+
+  return null;
+}
+
+router.get('/calculate', requireRole('DISTRIBUTOR', 'SUPERVISOR'), async (req, res) => {
+  try {
+    const ctx = await resolveRequesterContext(req.user);
+    if (!ctx) return error(res, 'NOT_FOUND', 'Profile not found', 404);
+
+    const calculation =
+      ctx.requesterType === 'SUPERVISOR'
+        ? await calculateSupervisorPaymentDue(req.user.id, req.user.organizationId)
+        : await calculateDistributorPaymentDue(ctx.distributorId);
+
+    return success(res, {
+      requesterType: ctx.requesterType,
+      distributorId: ctx.distributorId,
+      distributorName: ctx.distributorName,
+      walletId: ctx.walletId,
+      ...calculation,
+    });
+  } catch (err) {
+    return error(res, 'SERVER_ERROR', err.message, 500);
+  }
+});
+
+router.get('/', requireRole('ADMIN', 'DISTRIBUTOR', 'SUPERVISOR'), async (req, res) => {
+  try {
+    const status = req.query.status;
+    let where = { organizationId: req.user.organizationId };
+    if (status) where.status = status;
+
+    if (req.user.role === 'DISTRIBUTOR') {
+      const distributor = await getDistributorForUser(req.user);
+      if (!distributor) return success(res, []);
+      where.OR = [{ distributorId: distributor.id }, { requestedById: req.user.id }];
+    }
+
+    if (req.user.role === 'SUPERVISOR') {
+      where.requestedById = req.user.id;
+    }
+
+    const requests = await prisma.fundRequest.findMany({
+      where,
+      include: {
+        distributor: { select: { id: true, name: true } },
+        wallet: { select: { id: true, holderType: true } },
+        requestedBy: { select: { id: true, name: true, email: true, role: true } },
+        reviewedBy: { select: { id: true, name: true } },
+        fundSentBy: { select: { id: true, name: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return success(
+      res,
+      requests.map((r) => ({
+        ...r,
+        calculatedAmount: Number(r.calculatedAmount),
+        requestedAmount: Number(r.requestedAmount),
+        approvedAmount: r.approvedAmount ? Number(r.approvedAmount) : null,
+        breakdown: JSON.parse(r.breakdown),
+      }))
+    );
+  } catch (err) {
+    return error(res, 'SERVER_ERROR', err.message, 500);
+  }
+});
+
+const createSchema = z.object({
+  requestedAmount: z.number().positive(),
+  notes: z.string().optional(),
+});
+
+router.post('/', requireRole('DISTRIBUTOR', 'SUPERVISOR'), async (req, res) => {
+  try {
+    const data = createSchema.parse(req.body);
+    const ctx = await resolveRequesterContext(req.user);
+    if (!ctx) return error(res, 'NOT_FOUND', 'Profile not found', 404);
+
+    const pending = await prisma.fundRequest.findFirst({
+      where: {
+        walletId: ctx.walletId,
+        status: { in: ['PENDING', 'APPROVED', 'FUND_SENT', 'DISPUTED'] },
+      },
+    });
+    if (pending) {
+      return error(res, 'PENDING_EXISTS', 'You already have an active fund request in progress', 409);
+    }
+
+    const calculation =
+      ctx.requesterType === 'SUPERVISOR'
+        ? await calculateSupervisorPaymentDue(req.user.id, req.user.organizationId)
+        : await calculateDistributorPaymentDue(ctx.distributorId);
+
+    if (calculation.fundNeeded === 0) {
+      return error(
+        res,
+        'NO_PAYMENT_DUE',
+        'No worker payments or personal advance reimbursement is due right now',
+        400
+      );
+    }
+
+    const request = await prisma.fundRequest.create({
+      data: {
+        organizationId: req.user.organizationId,
+        requesterType: ctx.requesterType,
+        walletId: ctx.walletId,
+        distributorId: ctx.distributorId,
+        calculatedAmount: calculation.totalPaymentDue,
+        requestedAmount: data.requestedAmount,
+        breakdown: JSON.stringify(calculation),
+        notes: data.notes,
+        requestedById: req.user.id,
+      },
+      include: {
+        distributor: { select: { name: true } },
+        requestedBy: { select: { name: true, role: true } },
+      },
+    });
+
+    await createAuditLog({
+      userId: req.user.id,
+      entityType: 'FundRequest',
+      entityId: request.id,
+      action: 'CREATE',
+      newValue: { requestedAmount: data.requestedAmount, requesterType: ctx.requesterType },
+    });
+
+    return success(
+      res,
+      {
+        ...request,
+        calculatedAmount: Number(request.calculatedAmount),
+        requestedAmount: Number(request.requestedAmount),
+        breakdown: JSON.parse(request.breakdown),
+      },
+      201
+    );
+  } catch (err) {
+    if (err.name === 'ZodError') {
+      return error(res, 'VALIDATION_ERROR', err.errors[0].message);
+    }
+    return error(res, 'SERVER_ERROR', err.message, 500);
+  }
+});
+
+const approveSchema = z.object({
+  approvedAmount: z.number().positive().optional(),
+  notes: z.string().optional(),
+  acknowledgeMismatch: z.boolean().optional(),
+});
+
+router.get('/:id/verify', requireRole('ADMIN'), async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const fundRequest = await prisma.fundRequest.findFirst({
+      where: { id, organizationId: req.user.organizationId },
+      include: {
+        distributor: { select: { id: true, name: true } },
+        requestedBy: { select: { id: true, name: true, role: true } },
+      },
+    });
+    if (!fundRequest) return error(res, 'NOT_FOUND', 'Fund request not found', 404);
+
+    const verification = await verifyFundRequest(fundRequest);
+
+    return success(res, {
+      fundRequestId: id,
+      requesterType: fundRequest.requesterType,
+      requester: fundRequest.requestedBy,
+      distributor: fundRequest.distributor,
+      status: fundRequest.status,
+      createdAt: fundRequest.createdAt,
+      ...verification,
+    });
+  } catch (err) {
+    return error(res, 'SERVER_ERROR', err.message, 500);
+  }
+});
+
+router.post('/:id/approve', requireRole('ADMIN'), async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const data = approveSchema.parse(req.body);
+
+    const fundRequest = await prisma.fundRequest.findFirst({
+      where: { id, organizationId: req.user.organizationId },
+    });
+    if (!fundRequest) return error(res, 'NOT_FOUND', 'Fund request not found', 404);
+    if (fundRequest.status !== 'PENDING') {
+      return error(res, 'INVALID_STATUS', 'Only pending requests can be approved', 400);
+    }
+
+    const verification = await verifyFundRequest(fundRequest);
+    if (!verification.isCorrect && !data.acknowledgeMismatch) {
+      return error(
+        res,
+        'VERIFICATION_FAILED',
+        `${verification.message} Cross-verify and approve with acknowledgment if you still want to proceed.`,
+        409
+      );
+    }
+
+    const approvedAmount =
+      data.approvedAmount ??
+      (verification.isCorrect
+        ? Number(fundRequest.requestedAmount)
+        : verification.current.fundNeeded);
+
+    const updated = await prisma.fundRequest.update({
+      where: { id },
+      data: {
+        status: 'APPROVED',
+        approvedAmount,
+        reviewedById: req.user.id,
+        reviewedAt: new Date(),
+      },
+    });
+
+    await createAuditLog({
+      userId: req.user.id,
+      entityType: 'FundRequest',
+      entityId: id,
+      action: 'APPROVE',
+      newValue: { approvedAmount },
+    });
+
+    return success(res, {
+      ...updated,
+      calculatedAmount: Number(updated.calculatedAmount),
+      requestedAmount: Number(updated.requestedAmount),
+      approvedAmount: Number(updated.approvedAmount),
+    });
+  } catch (err) {
+    if (err.name === 'ZodError') {
+      return error(res, 'VALIDATION_ERROR', err.errors[0].message);
+    }
+    return error(res, 'SERVER_ERROR', err.message, 500);
+  }
+});
+
+const rejectSchema = z.object({
+  reason: z.string().min(3),
+});
+
+router.post('/:id/reject', requireRole('ADMIN'), async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const { reason } = rejectSchema.parse(req.body);
+
+    const fundRequest = await prisma.fundRequest.findFirst({
+      where: { id, organizationId: req.user.organizationId },
+    });
+    if (!fundRequest) return error(res, 'NOT_FOUND', 'Fund request not found', 404);
+    if (fundRequest.status !== 'PENDING') {
+      return error(res, 'INVALID_STATUS', 'Only pending requests can be rejected', 400);
+    }
+
+    const updated = await prisma.fundRequest.update({
+      where: { id },
+      data: {
+        status: 'REJECTED',
+        rejectReason: reason,
+        reviewedById: req.user.id,
+        reviewedAt: new Date(),
+      },
+    });
+
+    await createAuditLog({
+      userId: req.user.id,
+      entityType: 'FundRequest',
+      entityId: id,
+      action: 'REJECT',
+      newValue: { reason },
+    });
+
+    return success(res, updated);
+  } catch (err) {
+    if (err.name === 'ZodError') {
+      return error(res, 'VALIDATION_ERROR', err.errors[0].message);
+    }
+    return error(res, 'SERVER_ERROR', err.message, 500);
+  }
+});
+
+const markSentSchema = z
+  .object({
+    paymentMethod: z.enum(['CASH', 'UPI', 'BANK', 'OTHER']),
+    reference: z.string().optional(),
+    notes: z.string().optional(),
+  })
+  .refine(
+    (data) => {
+      if (data.paymentMethod === 'CASH') return true;
+      return !!(data.reference?.trim() || data.notes?.trim());
+    },
+    { message: 'Online/bank transfers require a reference or note' }
+  );
+
+router.post('/:id/mark-sent', requireRole('ADMIN'), async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const data = markSentSchema.parse(req.body);
+
+    const fundRequest = await prisma.fundRequest.findFirst({
+      where: { id, organizationId: req.user.organizationId },
+    });
+    if (!fundRequest) return error(res, 'NOT_FOUND', 'Fund request not found', 404);
+    if (!['APPROVED', 'DISPUTED'].includes(fundRequest.status)) {
+      return error(res, 'INVALID_STATUS', 'Only approved or disputed requests can be marked as sent', 400);
+    }
+
+    const updated = await prisma.fundRequest.update({
+      where: { id },
+      data: {
+        status: 'FUND_SENT',
+        fundSentAt: new Date(),
+        fundSentById: req.user.id,
+        sentPaymentMethod: data.paymentMethod,
+        sentReference: data.reference?.trim() || null,
+        sentNotes: data.notes?.trim() || null,
+        disputeReason: fundRequest.status === 'DISPUTED' ? fundRequest.disputeReason : null,
+      },
+    });
+
+    await createAuditLog({
+      userId: req.user.id,
+      entityType: 'FundRequest',
+      entityId: id,
+      action: 'MARK_SENT',
+      newValue: data,
+    });
+
+    return success(res, updated);
+  } catch (err) {
+    if (err.name === 'ZodError') {
+      return error(res, 'VALIDATION_ERROR', err.errors[0].message);
+    }
+    return error(res, 'SERVER_ERROR', err.message, 500);
+  }
+});
+
+router.post('/:id/accept', requireRole('DISTRIBUTOR', 'SUPERVISOR'), async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const fundRequest = await prisma.fundRequest.findFirst({
+      where: { id, organizationId: req.user.organizationId },
+    });
+    if (!fundRequest) return error(res, 'NOT_FOUND', 'Fund request not found', 404);
+    if (!(await assertFundRequestAccess(req.user, fundRequest))) {
+      return error(res, 'FORBIDDEN', 'Access denied', 403);
+    }
+    if (fundRequest.status !== 'FUND_SENT') {
+      return error(res, 'INVALID_STATUS', 'Only fund-sent requests can be accepted', 400);
+    }
+
+    const amount = Number(fundRequest.approvedAmount);
+
+    const updated = await prisma.$transaction(async (tx) => {
+      await creditWallet(tx, {
+        walletId: fundRequest.walletId,
+        amount,
+        fundRequestId: id,
+        createdById: req.user.id,
+        notes: `Fund request #${id} received — credited to wallet`,
+      });
+
+      return tx.fundRequest.update({
+        where: { id },
+        data: {
+          status: 'RECEIVED',
+          receivedAt: new Date(),
+        },
+      });
+    });
+
+    await createAuditLog({
+      userId: req.user.id,
+      entityType: 'FundRequest',
+      entityId: id,
+      action: 'ACCEPT_RECEIPT',
+      newValue: { amount },
+    });
+
+    return success(res, {
+      ...updated,
+      creditedAmount: amount,
+    });
+  } catch (err) {
+    return error(res, 'SERVER_ERROR', err.message, 500);
+  }
+});
+
+const disputeSchema = z.object({
+  reason: z.string().min(3),
+});
+
+router.post('/:id/dispute', requireRole('DISTRIBUTOR', 'SUPERVISOR'), async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const { reason } = disputeSchema.parse(req.body);
+
+    const fundRequest = await prisma.fundRequest.findFirst({
+      where: { id, organizationId: req.user.organizationId },
+    });
+    if (!fundRequest) return error(res, 'NOT_FOUND', 'Fund request not found', 404);
+    if (!(await assertFundRequestAccess(req.user, fundRequest))) {
+      return error(res, 'FORBIDDEN', 'Access denied', 403);
+    }
+    if (fundRequest.status !== 'FUND_SENT') {
+      return error(res, 'INVALID_STATUS', 'Only fund-sent requests can be disputed', 400);
+    }
+
+    const updated = await prisma.fundRequest.update({
+      where: { id },
+      data: {
+        status: 'DISPUTED',
+        disputeReason: reason,
+      },
+    });
+
+    await createAuditLog({
+      userId: req.user.id,
+      entityType: 'FundRequest',
+      entityId: id,
+      action: 'DISPUTE',
+      newValue: { reason },
+    });
+
+    return success(res, updated);
+  } catch (err) {
+    if (err.name === 'ZodError') {
+      return error(res, 'VALIDATION_ERROR', err.errors[0].message);
+    }
+    return error(res, 'SERVER_ERROR', err.message, 500);
+  }
+});
+
+export default router;
