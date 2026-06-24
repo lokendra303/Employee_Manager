@@ -10,6 +10,7 @@ import reportsRoutes from './routes/reports.js';
 import systemRoutes from './routes/system.js';
 import fundRequestsRoutes from './routes/fundRequests.js';
 import walletRoutes from './routes/wallet.js';
+import notificationsRoutes from './routes/notifications.js';
 import { error } from './lib/response.js';
 
 const app = express();
@@ -78,6 +79,7 @@ app.use('/api/v1/reports', reportsRoutes);
 app.use('/api/v1/system', systemRoutes);
 app.use('/api/v1/fund-requests', fundRequestsRoutes);
 app.use('/api/v1/wallet', walletRoutes);
+app.use('/api/v1/notifications', notificationsRoutes);
 
 app.use((_req, res) => {
   error(res, 'NOT_FOUND', 'Route not found', 404);

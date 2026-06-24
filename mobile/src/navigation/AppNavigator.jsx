@@ -1,9 +1,10 @@
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { getTabsForUser } from './roleTabs';
-import { colors } from '../theme';
+import { colors, tabBarStyle } from '../theme';
 
 import DashboardScreen from '../screens/DashboardScreen';
 import AttendanceScreen from '../screens/AttendanceScreen';
@@ -22,6 +23,7 @@ import DistributorsScreen from '../screens/DistributorsScreen';
 import SupervisorsScreen from '../screens/SupervisorsScreen';
 import SupervisorHomeScreen from '../screens/SupervisorHomeScreen';
 import DistributorDashboardScreen from '../screens/DistributorDashboardScreen';
+import NotificationsScreen from '../screens/NotificationsScreen';
 import ApiSettingsScreen from '../screens/ApiSettingsScreen';
 
 const Tab = createBottomTabNavigator();
@@ -54,7 +56,18 @@ function RoleTabs() {
         headerShown: false,
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.textMuted,
-        tabBarStyle: { paddingBottom: 4, height: 58 },
+        tabBarLabelStyle: {
+          fontSize: 11,
+          fontWeight: '600',
+          marginBottom: Platform.OS === 'android' ? 2 : 0,
+        },
+        tabBarStyle: {
+          backgroundColor: colors.surface,
+          borderTopColor: colors.borderLight,
+          borderTopWidth: 1,
+          paddingTop: 6,
+          ...tabBarStyle,
+        },
       }}
     >
       {tabs.map((tab) => (
@@ -140,6 +153,11 @@ export default function AppNavigator() {
         name="Profile"
         component={ProfileScreen}
         options={{ title: 'My Profile' }}
+      />
+      <Stack.Screen
+        name="Notifications"
+        component={NotificationsScreen}
+        options={{ title: 'Notifications' }}
       />
       <Stack.Screen
         name="ApiSettings"

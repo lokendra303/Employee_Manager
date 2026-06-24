@@ -103,6 +103,7 @@ model Organization {
   fundRequests FundRequest[]
   wallets      Wallet[]
   approvedBy   User?         @relation("ApprovedOrganizations", fields: [approvedById], references: [id])
+  notifications Notification[]
 
   @@map("organizations")
 }
@@ -131,6 +132,8 @@ model User {
   fundRequestsSent        FundRequest[]            @relation("FundSender")
   wallet                  Wallet?
   walletTransactions      WalletTransaction[]      @relation("WalletTransactionCreator")
+  notifications           Notification[]
+  fundRequestNotes        FundRequestNote[]
 
   @@map("users")
 }
@@ -319,6 +322,7 @@ model FundRequest {
   requestedBy  User         @relation("FundRequester", fields: [requestedById], references: [id])
   reviewedBy   User?        @relation("FundReviewer", fields: [reviewedById], references: [id])
   fundSentBy   User?        @relation("FundSender", fields: [fundSentById], references: [id])
+  requestNotes FundRequestNote[]
 
   @@map("fund_requests")
 }
@@ -360,4 +364,38 @@ model WalletTransaction {
   createdBy User    @relation("WalletTransactionCreator", fields: [createdById], references: [id])
 
   @@map("wallet_transactions")
+}
+
+model Notification {
+  id             Int       @id @default(autoincrement())
+  organizationId Int?      @map("organization_id")
+  userId         Int       @map("user_id")
+  type           String
+  title          String
+  body           String    @db.Text
+  entityType     String?   @map("entity_type")
+  entityId       Int?      @map("entity_id")
+  metadata       String?   @db.Text
+  readAt         DateTime? @map("read_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt])
+  @@map("notifications")
+}
+
+model FundRequestNote {
+  id            Int      @id @default(autoincrement())
+  fundRequestId Int      @map("fund_request_id")
+  authorId      Int      @map("author_id")
+  body          String   @db.Text
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  fundRequest FundRequest @relation(fields: [fundRequestId], references: [id], onDelete: Cascade)
+  author      User        @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([fundRequestId, createdAt])
+  @@map("fund_request_notes")
 }

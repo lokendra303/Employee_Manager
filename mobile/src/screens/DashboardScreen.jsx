@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
-import { FlatList, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { StyleSheet, View } from 'react-native';
 import api from '../api/client';
-import { ErrorBanner, LoadingView, Screen, StatCard } from '../components/ui';
-import { colors } from '../theme';
+import ScreenLayout from '../components/ScreenLayout';
+import { ErrorBanner, LoadingView, SectionTitle, StatCard } from '../components/ui';
+import { spacing } from '../theme';
 
-export default function DashboardScreen() {
+export default function DashboardScreen({ navigation }) {
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -21,37 +21,51 @@ export default function DashboardScreen() {
   if (loading) return <LoadingView label="Loading dashboard..." />;
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
-      <Screen
-        title="Dashboard"
-        subtitle={summary?.organizationName || 'Organization overview'}
-      >
-        <ErrorBanner message={error} />
-        <View style={styles.stats}>
-          <StatCard label="Active Workers" value={String(summary?.workerCount ?? 0)} />
-          <StatCard label="Distributors" value={String(summary?.distributorCount ?? 0)} />
-          <StatCard
-            label="Marked Today"
-            value={String(summary?.todayAttendance ?? 0)}
-            sub={`${summary?.unmarkedToday ?? 0} unmarked`}
-          />
-          <StatCard
-            label="Pending Pay"
-            value={`₹${(summary?.pendingAccrualTotal ?? 0).toLocaleString()}`}
-            sub={`${summary?.pendingAccrualCount ?? 0} accruals`}
-          />
-        </View>
-      </Screen>
-    </SafeAreaView>
+    <ScreenLayout
+      title="Dashboard"
+      subtitle={summary?.organizationName || 'Organization overview'}
+      headerDark
+      showNotifications
+      onNotificationsPress={() => navigation.navigate('Notifications')}
+      edges={[]}
+    >
+      <ErrorBanner message={error} />
+      <SectionTitle title="Overview" />
+      <View style={styles.stats}>
+        <StatCard
+          label="Active Workers"
+          value={String(summary?.workerCount ?? 0)}
+          icon="people-outline"
+          tone="brand"
+        />
+        <StatCard
+          label="Distributors"
+          value={String(summary?.distributorCount ?? 0)}
+          icon="briefcase-outline"
+        />
+        <StatCard
+          label="Marked Today"
+          value={String(summary?.todayAttendance ?? 0)}
+          sub={`${summary?.unmarkedToday ?? 0} unmarked`}
+          icon="calendar-outline"
+          tone="success"
+        />
+        <StatCard
+          label="Pending Pay"
+          value={`₹${(summary?.pendingAccrualTotal ?? 0).toLocaleString()}`}
+          sub={`${summary?.pendingAccrualCount ?? 0} accruals`}
+          icon="wallet-outline"
+          tone="warning"
+        />
+      </View>
+    </ScreenLayout>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.background },
   stats: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 12,
-    paddingHorizontal: 16,
+    gap: spacing.md,
   },
 });

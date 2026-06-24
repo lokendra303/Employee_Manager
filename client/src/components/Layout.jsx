@@ -1,6 +1,7 @@
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Icon } from './ui';
+import NotificationBell from './NotificationBell';
 
 const navItems = {
   SYSTEM_ADMIN: [
@@ -78,9 +79,12 @@ export default function Layout({ children }) {
     <div className="min-h-screen flex flex-col md:flex-row">
       <header className="md:hidden bg-ink-900 px-4 py-3 flex items-center justify-between sticky top-0 z-20 border-b border-white/5">
         <Logo compact />
-        <button onClick={handleLogout} className="text-xs font-semibold text-ink-300 hover:text-white px-3 py-1.5 rounded-lg hover:bg-white/5">
-          Sign out
-        </button>
+        <div className="flex items-center gap-1">
+          <NotificationBell />
+          <button onClick={handleLogout} className="text-xs font-semibold text-ink-300 hover:text-white px-3 py-1.5 rounded-lg hover:bg-white/5">
+            Sign out
+          </button>
+        </div>
       </header>
 
       <aside className="hidden md:flex md:w-64 lg:w-72 md:flex-col bg-sidebar border-r border-white/5 min-h-screen sticky top-0">
@@ -125,7 +129,11 @@ export default function Layout({ children }) {
           ))}
         </nav>
 
-        <div className="p-4 border-t border-white/5">
+        <div className="p-4 border-t border-white/5 space-y-2">
+          <div className="flex items-center justify-between px-1">
+            <span className="text-xs text-ink-400 font-medium">Alerts</span>
+            <NotificationBell dropUp />
+          </div>
           <button
             onClick={handleLogout}
             className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium text-ink-300 border border-white/10 hover:bg-white/5 hover:text-white transition"

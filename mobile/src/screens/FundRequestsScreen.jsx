@@ -1,26 +1,22 @@
 import { useEffect, useState } from 'react';
-import {
-  FlatList,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext';
+import ScreenLayout from '../components/ScreenLayout';
 import {
   Badge,
+  Card,
   ErrorBanner,
+  InputField,
   LoadingView,
   PrimaryButton,
-  Screen,
+  SecondaryButton,
+  SectionTitle,
   StatCard,
   SuccessBanner,
 } from '../components/ui';
-import { colors } from '../theme';
+import { colors, radius, spacing } from '../theme';
 
 const STATUS_TONES = {
   PENDING: 'warning',
@@ -31,9 +27,106 @@ const STATUS_TONES = {
   DISPUTED: 'warning',
 };
 
-export default function FundRequestsScreen() {
+function FundRequestCard({
+  req,
+  isAdmin,
+  expanded,
+  onToggle,
+  onAccept,
+  onApprove,
+  onReject,
+  onDispute,
+  onAddNote,
+  noteText,
+  onNoteTextChange,
+  notes,
+  loadingNotes,
+}) {
+  const requesterName = req.requestedBy?.name || req.requesterType;
+
+  return (
+    <Card style={[styles.card, expanded && styles.cardExpanded]} elevated>
+      <Pressable onPress={onToggle} style={styles.cardHeader}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.cardTitle}>₹{(req.requestedAmount ?? 0).toLocaleString()}</Text>
+          <Text style={styles.cardMeta}>
+            {requesterName} · {new Date(req.createdAt).toLocaleDateString()}
+          </Text>
+        </View>
+        <Badge label={req.status} tone={STATUS_TONES[req.status] || 'neutral'} />
+        <Ionicons
+          name={expanded ? 'chevron-up' : 'chevron-down'}
+          size={18}
+          color={colors.textMuted}
+          style={{ marginLeft: 4 }}
+        />
+      </Pressable>
+
+      {req.notes ? (
+        <Text style={styles.inlineNote}>Request note: {req.notes}</Text>
+      ) : null}
+      {req.rejectReason ? (
+        <Text style={styles.inlineReject}>Rejected: {req.rejectReason}</Text>
+      ) : null}
+      {req.sentNotes ? (
+        <Text style={styles.inlineNote}>Transfer note: {req.sentNotes}</Text>
+      ) : null}
+      {req.disputeReason ? (
+        <Text style={styles.inlineReject}>Dispute: {req.disputeReason}</Text>
+      ) : null}
+
+      {expanded ? (
+        <View style={styles.expanded}>
+          <Text style={styles.notesTitle}>Conversation</Text>
+          {loadingNotes ? (
+            <Text style={styles.cardMeta}>Loading notes...</Text>
+          ) : notes.length ? (
+            notes.map((n) => (
+              <View key={n.id} style={styles.noteBubble}>
+                <Text style={styles.noteAuthor}>
+                  {n.author?.name || 'User'} · {new Date(n.createdAt).toLocaleString()}
+                </Text>
+                <Text style={styles.noteBody}>{n.body}</Text>
+              </View>
+            ))
+          ) : (
+            <Text style={styles.cardMeta}>No notes yet</Text>
+          )}
+
+          <InputField
+            value={noteText}
+            onChangeText={onNoteTextChange}
+            placeholder="Add a note..."
+            multiline
+          />
+          <SecondaryButton title="Send note" onPress={onAddNote} />
+
+          {req.status === 'FUND_SENT' && !isAdmin ? (
+            <View style={styles.actions}>
+              <PrimaryButton title="Accept Funds" onPress={() => onAccept(req.id)} />
+              <SecondaryButton title="Dispute" danger onPress={() => onDispute(req.id)} />
+            </View>
+          ) : null}
+
+          {isAdmin && req.status === 'PENDING' ? (
+            <View style={styles.actions}>
+              <PrimaryButton
+                title="Approve"
+                onPress={() => onApprove(req.id, req.requestedAmount)}
+              />
+              <SecondaryButton title="Reject" danger onPress={() => onReject(req.id)} />
+            </View>
+          ) : null}
+        </View>
+      ) : null}
+    </Card>
+  );
+}
+
+export default function FundRequestsScreen({ navigation, route }) {
   const { user } = useAuth();
   const isAdmin = user?.role === 'ADMIN';
+  const highlightId = route?.params?.highlightId;
 
   const [calculation, setCalculation] = useState(null);
   const [requests, setRequests] = useState([]);
@@ -43,6 +136,10 @@ export default function FundRequestsScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [expandedId, setExpandedId] = useState(highlightId ?? null);
+  const [threadNotes, setThreadNotes] = useState({});
+  const [loadingNotes, setLoadingNotes] = useState(false);
+  const [replyText, setReplyText] = useState({});
 
   const load = async () => {
     try {
@@ -65,9 +162,37 @@ export default function FundRequestsScreen() {
     }
   };
 
+  const loadNotes = async (id) => {
+    setLoadingNotes(true);
+    try {
+      const res = await api.get(`/fund-requests/${id}/notes`);
+      setThreadNotes((prev) => ({ ...prev, [id]: res.data ?? [] }));
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoadingNotes(false);
+    }
+  };
+
   useEffect(() => {
     load();
   }, [isAdmin]);
+
+  useEffect(() => {
+    if (highlightId) {
+      setExpandedId(highlightId);
+      loadNotes(highlightId);
+    }
+  }, [highlightId]);
+
+  const toggleExpand = async (id) => {
+    if (expandedId === id) {
+      setExpandedId(null);
+      return;
+    }
+    setExpandedId(id);
+    if (!threadNotes[id]) await loadNotes(id);
+  };
 
   const submitRequest = async () => {
     setError('');
@@ -78,7 +203,7 @@ export default function FundRequestsScreen() {
         requestedAmount: Number(amount),
         notes: notes || undefined,
       });
-      setMessage('Fund request submitted');
+      setMessage('Fund request submitted — admins notified');
       setNotes('');
       load();
     } catch (err) {
@@ -99,10 +224,61 @@ export default function FundRequestsScreen() {
   };
 
   const approveRequest = async (id, approvedAmount) => {
+    const note = replyText[id]?.trim();
     try {
-      await api.post(`/fund-requests/${id}/approve`, { approvedAmount });
-      setMessage('Request approved');
+      await api.post(`/fund-requests/${id}/approve`, {
+        approvedAmount,
+        notes: note || undefined,
+      });
+      setMessage('Request approved — requester notified');
+      setReplyText((prev) => ({ ...prev, [id]: '' }));
       load();
+      loadNotes(id);
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const rejectRequest = async (id) => {
+    const reason = replyText[id]?.trim();
+    if (!reason || reason.length < 3) {
+      setError('Add a rejection reason in the note field (min 3 characters)');
+      return;
+    }
+    try {
+      await api.post(`/fund-requests/${id}/reject`, { reason });
+      setMessage('Request rejected — requester notified');
+      setReplyText((prev) => ({ ...prev, [id]: '' }));
+      load();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const disputeRequest = async (id) => {
+    const reason = replyText[id]?.trim();
+    if (!reason || reason.length < 3) {
+      setError('Add a dispute reason in the note field (min 3 characters)');
+      return;
+    }
+    try {
+      await api.post(`/fund-requests/${id}/dispute`, { reason });
+      setMessage('Dispute submitted — admins notified');
+      setReplyText((prev) => ({ ...prev, [id]: '' }));
+      load();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const addNote = async (id) => {
+    const body = replyText[id]?.trim();
+    if (!body) return;
+    try {
+      await api.post(`/fund-requests/${id}/notes`, { body });
+      setReplyText((prev) => ({ ...prev, [id]: '' }));
+      setMessage('Note sent');
+      loadNotes(id);
     } catch (err) {
       setError(err.message);
     }
@@ -111,130 +287,105 @@ export default function FundRequestsScreen() {
   if (loading) return <LoadingView label="Loading fund requests..." />;
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
-      <ScrollView>
-        <Screen
-          title="Fund Requests"
-          subtitle={isAdmin ? 'Review and approve requests' : 'Request organization funds'}
-        >
-          <ErrorBanner message={error} />
-          <SuccessBanner message={message} />
+    <ScreenLayout
+      title="Fund Requests"
+      subtitle={isAdmin ? 'Review and approve' : 'Request organization funds'}
+      headerDark
+      showNotifications
+      onNotificationsPress={() => navigation.navigate('Notifications')}
+      edges={[]}
+      keyboard
+    >
+      <ErrorBanner message={error} />
+      <SuccessBanner message={message} />
 
-          {!isAdmin && calculation ? (
-            <View style={styles.stats}>
-              <StatCard
-                label="Fund Needed"
-                value={`₹${(calculation.fundNeeded ?? 0).toLocaleString()}`}
-              />
-              <StatCard
-                label="Workers"
-                value={String(calculation.workerCount ?? 0)}
-              />
-            </View>
-          ) : null}
+      {!isAdmin && calculation ? (
+        <View style={styles.stats}>
+          <StatCard
+            label="Fund Needed"
+            value={`₹${(calculation.fundNeeded ?? 0).toLocaleString()}`}
+            icon="cash-outline"
+            tone="warning"
+          />
+          <StatCard
+            label="Workers"
+            value={String(calculation.workerCount ?? 0)}
+            icon="people-outline"
+            tone="brand"
+          />
+        </View>
+      ) : null}
 
-          {!isAdmin ? (
-            <View style={styles.form}>
-              <Text style={styles.label}>Requested amount</Text>
-              <TextInput
-                style={styles.input}
-                value={amount}
-                onChangeText={setAmount}
-                keyboardType="numeric"
-                placeholder="0"
-              />
-              <Text style={styles.label}>Notes (optional)</Text>
-              <TextInput
-                style={styles.input}
-                value={notes}
-                onChangeText={setNotes}
-                placeholder="Notes"
-              />
-              <PrimaryButton
-                title="Submit Request"
-                onPress={submitRequest}
-                loading={submitting}
-              />
-            </View>
-          ) : null}
+      {!isAdmin ? (
+        <Card style={styles.formCard} elevated>
+          <SectionTitle title="New request" />
+          <InputField
+            label="Requested amount"
+            value={amount}
+            onChangeText={setAmount}
+            keyboardType="numeric"
+            placeholder="0"
+          />
+          <InputField
+            label="Note to admin"
+            value={notes}
+            onChangeText={setNotes}
+            placeholder="Explain why you need these funds..."
+            multiline
+          />
+          <PrimaryButton title="Submit Request" onPress={submitRequest} loading={submitting} icon="send-outline" />
+        </Card>
+      ) : null}
 
-          <Text style={styles.section}>Requests</Text>
-          {requests.map((req) => (
-            <View key={req.id} style={styles.card}>
-              <View style={styles.cardHeader}>
-                <Text style={styles.cardTitle}>
-                  ₹{(req.requestedAmount ?? 0).toLocaleString()}
-                </Text>
-                <Badge label={req.status} tone={STATUS_TONES[req.status] || 'neutral'} />
-              </View>
-              <Text style={styles.cardMeta}>
-                {req.requester?.name || req.requesterType} ·{' '}
-                {new Date(req.createdAt).toLocaleDateString()}
-              </Text>
-              {req.status === 'FUND_SENT' && !isAdmin ? (
-                <Pressable style={styles.actionBtn} onPress={() => acceptRequest(req.id)}>
-                  <Text style={styles.actionText}>Accept Funds</Text>
-                </Pressable>
-              ) : null}
-              {isAdmin && req.status === 'PENDING' ? (
-                <Pressable
-                  style={styles.actionBtn}
-                  onPress={() => approveRequest(req.id, req.requestedAmount)}
-                >
-                  <Text style={styles.actionText}>Approve</Text>
-                </Pressable>
-              ) : null}
-            </View>
-          ))}
-          {!requests.length ? (
-            <Text style={styles.empty}>No fund requests yet</Text>
-          ) : null}
-        </Screen>
-      </ScrollView>
-    </SafeAreaView>
+      <SectionTitle title={`Requests (${requests.length})`} />
+      {requests.map((req) => (
+        <FundRequestCard
+          key={req.id}
+          req={req}
+          isAdmin={isAdmin}
+          expanded={expandedId === req.id}
+          onToggle={() => toggleExpand(req.id)}
+          onAccept={acceptRequest}
+          onApprove={approveRequest}
+          onReject={rejectRequest}
+          onDispute={disputeRequest}
+          onAddNote={() => addNote(req.id)}
+          noteText={replyText[req.id] || ''}
+          onNoteTextChange={(text) => setReplyText((prev) => ({ ...prev, [req.id]: text }))}
+          notes={threadNotes[req.id] || []}
+          loadingNotes={loadingNotes && expandedId === req.id}
+        />
+      ))}
+      {!requests.length ? <Text style={styles.empty}>No fund requests yet</Text> : null}
+    </ScreenLayout>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.background },
-  stats: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, paddingHorizontal: 16 },
-  form: { padding: 16, gap: 8 },
-  label: { fontSize: 13, fontWeight: '600', color: colors.text },
-  input: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 10,
-    padding: 12,
-    backgroundColor: '#fff',
-    fontSize: 16,
-  },
-  section: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.textMuted,
-    paddingHorizontal: 16,
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  card: {
-    marginHorizontal: 16,
-    marginBottom: 10,
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: 14,
-  },
-  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  cardTitle: { fontSize: 18, fontWeight: '700', color: colors.text },
+  stats: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
+  formCard: { gap: spacing.md },
+  card: { marginBottom: spacing.sm },
+  cardExpanded: { borderColor: colors.primaryLight },
+  cardHeader: { flexDirection: 'row', alignItems: 'center' },
+  cardTitle: { fontSize: 20, fontWeight: '800', color: colors.text },
   cardMeta: { fontSize: 12, color: colors.textMuted, marginTop: 4 },
-  actionBtn: {
-    marginTop: 10,
-    backgroundColor: colors.primary,
-    borderRadius: 8,
-    paddingVertical: 10,
-    alignItems: 'center',
+  inlineNote: { fontSize: 13, color: colors.textSecondary, marginTop: spacing.sm, fontStyle: 'italic' },
+  inlineReject: { fontSize: 13, color: colors.danger, marginTop: spacing.sm, fontWeight: '500' },
+  expanded: { marginTop: spacing.md, gap: spacing.sm },
+  notesTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
-  actionText: { color: '#fff', fontWeight: '600' },
-  empty: { textAlign: 'center', color: colors.textMuted, padding: 24 },
+  noteBubble: {
+    backgroundColor: colors.background,
+    borderRadius: radius.md,
+    padding: spacing.md,
+  },
+  noteAuthor: { fontSize: 11, fontWeight: '700', color: colors.textMuted },
+  noteBody: { fontSize: 14, color: colors.text, marginTop: 4, lineHeight: 20 },
+  actions: { gap: spacing.sm, marginTop: spacing.sm },
+  empty: { textAlign: 'center', color: colors.textMuted, padding: spacing.lg },
 });

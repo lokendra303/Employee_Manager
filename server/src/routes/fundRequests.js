@@ -11,6 +11,13 @@ import {
 } from '../services/fundRequest.js';
 import { ensureWalletForUser, creditWallet } from '../services/wallet.js';
 import { createAuditLog } from '../services/audit.js';
+import {
+  formatCurrency,
+  notifyFundRequestCreated,
+  notifyFundRequestNote,
+  notifyFundRequestStatus,
+  notifyOrgAdmins,
+} from '../services/notification.js';
 
 const router = Router();
 
@@ -41,6 +48,24 @@ async function resolveRequesterContext(user) {
   }
 
   return null;
+}
+
+async function addFundRequestNote(fundRequestId, authorId, body) {
+  const trimmed = body?.trim();
+  if (!trimmed) return null;
+
+  return prisma.fundRequestNote.create({
+    data: { fundRequestId, authorId, body: trimmed },
+    include: { author: { select: { id: true, name: true, role: true } } },
+  });
+}
+
+async function getFundRequestNotes(fundRequestId) {
+  return prisma.fundRequestNote.findMany({
+    where: { fundRequestId },
+    include: { author: { select: { id: true, name: true, role: true } } },
+    orderBy: { createdAt: 'asc' },
+  });
 }
 
 router.get('/calculate', requireRole('DISTRIBUTOR', 'SUPERVISOR'), async (req, res) => {
@@ -157,9 +182,13 @@ router.post('/', requireRole('DISTRIBUTOR', 'SUPERVISOR'), async (req, res) => {
       },
       include: {
         distributor: { select: { name: true } },
-        requestedBy: { select: { name: true, role: true } },
+        requestedBy: { select: { id: true, name: true, role: true } },
       },
     });
+
+    if (data.notes?.trim()) {
+      await addFundRequestNote(request.id, req.user.id, data.notes);
+    }
 
     await createAuditLog({
       userId: req.user.id,
@@ -168,6 +197,12 @@ router.post('/', requireRole('DISTRIBUTOR', 'SUPERVISOR'), async (req, res) => {
       action: 'CREATE',
       newValue: { requestedAmount: data.requestedAmount, requesterType: ctx.requesterType },
     });
+
+    try {
+      await notifyFundRequestCreated(request, request.requestedBy, data.notes?.trim());
+    } catch (notifyErr) {
+      console.error('Failed to notify admins of fund request:', notifyErr);
+    }
 
     return success(
       res,
@@ -268,6 +303,21 @@ router.post('/:id/approve', requireRole('ADMIN'), async (req, res) => {
       newValue: { approvedAmount },
     });
 
+    const approveBody = data.notes?.trim()
+      ? `Your fund request was approved for ${formatCurrency(approvedAmount)}. Note: ${data.notes.trim()}`
+      : `Your fund request was approved for ${formatCurrency(approvedAmount)}.`;
+
+    if (data.notes?.trim()) {
+      await addFundRequestNote(id, req.user.id, data.notes);
+    }
+
+    await notifyFundRequestStatus(updated, {
+      type: 'FUND_REQUEST_APPROVED',
+      title: 'Fund request approved',
+      body: approveBody,
+      userId: fundRequest.requestedById,
+    });
+
     return success(res, {
       ...updated,
       calculatedAmount: Number(updated.calculatedAmount),
@@ -315,6 +365,13 @@ router.post('/:id/reject', requireRole('ADMIN'), async (req, res) => {
       entityId: id,
       action: 'REJECT',
       newValue: { reason },
+    });
+
+    await notifyFundRequestStatus(updated, {
+      type: 'FUND_REQUEST_REJECTED',
+      title: 'Fund request rejected',
+      body: `Your fund request was rejected. Reason: ${reason}`,
+      userId: fundRequest.requestedById,
     });
 
     return success(res, updated);
@@ -374,6 +431,21 @@ router.post('/:id/mark-sent', requireRole('ADMIN'), async (req, res) => {
       newValue: data,
     });
 
+    const sentBody = data.notes?.trim()
+      ? `Funds marked as sent via ${data.paymentMethod}. Note: ${data.notes.trim()}`
+      : `Funds marked as sent via ${data.paymentMethod}. Please accept or dispute.`;
+
+    if (data.notes?.trim()) {
+      await addFundRequestNote(id, req.user.id, data.notes);
+    }
+
+    await notifyFundRequestStatus(updated, {
+      type: 'FUND_REQUEST_SENT',
+      title: 'Funds sent',
+      body: sentBody,
+      userId: fundRequest.requestedById,
+    });
+
     return success(res, updated);
   } catch (err) {
     if (err.name === 'ZodError') {
@@ -425,6 +497,15 @@ router.post('/:id/accept', requireRole('DISTRIBUTOR', 'SUPERVISOR'), async (req,
       newValue: { amount },
     });
 
+    await notifyOrgAdmins(fundRequest.organizationId, {
+      type: 'FUND_REQUEST_RECEIVED',
+      title: 'Fund request completed',
+      body: `Fund request #${id} was accepted. ${formatCurrency(amount)} credited to wallet.`,
+      entityType: 'FundRequest',
+      entityId: id,
+      metadata: { status: 'RECEIVED' },
+    }, { excludeUserId: req.user.id });
+
     return success(res, {
       ...updated,
       creditedAmount: amount,
@@ -470,7 +551,63 @@ router.post('/:id/dispute', requireRole('DISTRIBUTOR', 'SUPERVISOR'), async (req
       newValue: { reason },
     });
 
+    await notifyOrgAdmins(fundRequest.organizationId, {
+      type: 'FUND_REQUEST_DISPUTED',
+      title: 'Fund request disputed',
+      body: `Fund request #${id} was disputed. Reason: ${reason}`,
+      entityType: 'FundRequest',
+      entityId: id,
+      metadata: { status: 'DISPUTED' },
+    }, { excludeUserId: req.user.id });
+
     return success(res, updated);
+  } catch (err) {
+    if (err.name === 'ZodError') {
+      return error(res, 'VALIDATION_ERROR', err.errors[0].message);
+    }
+    return error(res, 'SERVER_ERROR', err.message, 500);
+  }
+});
+
+const noteSchema = z.object({
+  body: z.string().min(1).max(2000),
+});
+
+router.get('/:id/notes', requireRole('ADMIN', 'DISTRIBUTOR', 'SUPERVISOR'), async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const fundRequest = await prisma.fundRequest.findFirst({
+      where: { id, organizationId: req.user.organizationId },
+    });
+    if (!fundRequest) return error(res, 'NOT_FOUND', 'Fund request not found', 404);
+    if (!(await assertFundRequestAccess(req.user, fundRequest))) {
+      return error(res, 'FORBIDDEN', 'Access denied', 403);
+    }
+
+    const notes = await getFundRequestNotes(id);
+    return success(res, notes);
+  } catch (err) {
+    return error(res, 'SERVER_ERROR', err.message, 500);
+  }
+});
+
+router.post('/:id/notes', requireRole('ADMIN', 'DISTRIBUTOR', 'SUPERVISOR'), async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const { body } = noteSchema.parse(req.body);
+
+    const fundRequest = await prisma.fundRequest.findFirst({
+      where: { id, organizationId: req.user.organizationId },
+    });
+    if (!fundRequest) return error(res, 'NOT_FOUND', 'Fund request not found', 404);
+    if (!(await assertFundRequestAccess(req.user, fundRequest))) {
+      return error(res, 'FORBIDDEN', 'Access denied', 403);
+    }
+
+    const note = await addFundRequestNote(id, req.user.id, body);
+    await notifyFundRequestNote(fundRequest, req.user, body);
+
+    return success(res, note, 201);
   } catch (err) {
     if (err.name === 'ZodError') {
       return error(res, 'VALIDATION_ERROR', err.errors[0].message);

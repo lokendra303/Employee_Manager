@@ -19,6 +19,7 @@
       "package": "com.attendancemanager.app",
       "versionCode": 1,
       "usesCleartextTraffic": true,
+      "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
         "backgroundColor": "#2563eb",
         "foregroundImage": "./assets/android-icon-foreground.png",

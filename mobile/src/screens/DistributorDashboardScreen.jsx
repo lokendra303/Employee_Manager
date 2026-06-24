@@ -1,14 +1,25 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { StyleSheet, Text, View } from 'react-native';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext';
-import { Badge, ErrorBanner, LoadingView, Screen, StatCard } from '../components/ui';
-import { colors } from '../theme';
+import ScreenLayout from '../components/ScreenLayout';
+import {
+  Badge,
+  ErrorBanner,
+  LoadingView,
+  QuickActionCard,
+  SectionTitle,
+  StatCard,
+} from '../components/ui';
+import { spacing } from '../theme';
 
-function formatMoney(value) {
-  return `₹${(Number(value) || 0).toLocaleString()}`;
-}
+const QUICK_ICONS = {
+  DistributorHome: 'people-outline',
+  Wallet: 'wallet-outline',
+  FundRequests: 'send-outline',
+  Transactions: 'swap-horizontal-outline',
+  Reports: 'bar-chart-outline',
+};
 
 export default function DistributorDashboardScreen({ navigation }) {
   const { user } = useAuth();
@@ -52,101 +63,68 @@ export default function DistributorDashboardScreen({ navigation }) {
     profile?.name || user?.linkedDistributorName || user?.name?.split(' ')[0] || 'Distributor';
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
-      <ScrollView contentContainerStyle={styles.scroll}>
-        <Screen title={`Hello, ${displayName.split(' ')[0]}`}>
-          <ErrorBanner message={error} />
+    <ScreenLayout
+      title={`Hello, ${displayName.split(' ')[0]}`}
+      subtitle={user?.organizationName || 'Your organization'}
+      headerDark
+      showNotifications
+      onNotificationsPress={() => navigation.navigate('Notifications')}
+      edges={[]}
+    >
+      <ErrorBanner message={error} />
 
-          <View style={styles.welcome}>
-            <Text style={styles.org}>{user?.organizationName || 'Your organization'}</Text>
-            <View style={styles.badges}>
-              <Badge label="Distributor" tone="brand" />
-            </View>
-            {profile?.contactPhone ? (
-              <Text style={styles.contact}>{profile.contactPhone}</Text>
-            ) : null}
-            {!profile ? (
-              <Text style={styles.warning}>
-                No distributor profile linked to this account. Ask your admin to link your login.
-              </Text>
-            ) : null}
-          </View>
+      <View style={styles.badges}>
+        <Badge label="Distributor" tone="brand" />
+      </View>
+      {profile?.contactPhone ? <Text style={styles.contact}>{profile.contactPhone}</Text> : null}
+      {!profile ? (
+        <Text style={styles.warning}>
+          No distributor profile linked. Ask your admin to link your login.
+        </Text>
+      ) : null}
 
-          <View style={styles.stats}>
-            <StatCard label="Workers" value={String(profile?.workerCount ?? 0)} />
-            <StatCard
-              label="Pending Pay"
-              value={formatMoney(profile?.totalPending)}
-              sub="Accrued to workers"
-            />
-            <StatCard
-              label="Wallet Balance"
-              value={formatMoney(walletBalance)}
-              sub="Available to pay"
-            />
-            <StatCard
-              label="Total Paid"
-              value={formatMoney(profile?.totalPaid)}
-              sub={`Opening ${formatMoney(profile?.openingBalance)}`}
-            />
-          </View>
+      <SectionTitle title="Overview" />
+      <View style={styles.stats}>
+        <StatCard
+          label="Wallet Balance"
+          value={`₹${walletBalance.toLocaleString()}`}
+          sub="Available funds"
+          icon="wallet-outline"
+          tone="brand"
+        />
+        <StatCard
+          label="Opening Balance"
+          value={`₹${(profile?.openingBalance ?? 0).toLocaleString()}`}
+          icon="trending-up-outline"
+        />
+        <StatCard
+          label="Workers"
+          value={String(profile?.workerCount ?? 0)}
+          icon="people-outline"
+          tone="success"
+        />
+      </View>
 
-          <Text style={styles.section}>Quick actions</Text>
-          {quickLinks.map((link) => (
-            <Pressable
-              key={link.tab}
-              style={styles.linkRow}
-              onPress={() => navigation.navigate(link.tab)}
-            >
-              <View>
-                <Text style={styles.linkTitle}>{link.label}</Text>
-                <Text style={styles.linkSub}>{link.sub}</Text>
-              </View>
-              <Text style={styles.chevron}>›</Text>
-            </Pressable>
-          ))}
-        </Screen>
-      </ScrollView>
-    </SafeAreaView>
+      <SectionTitle title="Quick actions" />
+      <View style={styles.links}>
+        {quickLinks.map((link) => (
+          <QuickActionCard
+            key={link.tab}
+            icon={QUICK_ICONS[link.tab]}
+            label={link.label}
+            sub={link.sub}
+            onPress={() => navigation.navigate(link.tab)}
+          />
+        ))}
+      </View>
+    </ScreenLayout>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.background },
-  scroll: { paddingBottom: 24 },
-  welcome: { paddingHorizontal: 16, marginBottom: 8 },
-  org: { fontSize: 14, color: colors.textMuted },
-  badges: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 },
-  contact: { fontSize: 12, color: colors.textMuted, marginTop: 8 },
-  warning: { fontSize: 12, color: colors.warning, marginTop: 8 },
-  stats: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-    paddingHorizontal: 16,
-    marginBottom: 8,
-  },
-  section: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.textMuted,
-    paddingHorizontal: 16,
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  linkRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginHorizontal: 16,
-    marginBottom: 8,
-    padding: 14,
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  linkTitle: { fontSize: 16, fontWeight: '600', color: colors.text },
-  linkSub: { fontSize: 12, color: colors.textMuted, marginTop: 2 },
-  chevron: { fontSize: 22, color: colors.textMuted },
+  badges: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  contact: { fontSize: 13, color: '#64748b' },
+  warning: { fontSize: 13, color: '#b45309', fontWeight: '600' },
+  stats: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
+  links: { gap: spacing.sm },
 });

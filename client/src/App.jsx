@@ -18,6 +18,7 @@ import FundRequestsPage from './pages/FundRequestsPage';
 import Wallet from './pages/shared/Wallet';
 import WorkerProfile from './pages/shared/WorkerProfile';
 import Profile from './pages/shared/Profile';
+import Notifications from './pages/shared/Notifications';
 import SystemAdmin from './pages/system/SystemAdmin';
 import { useParams } from 'react-router-dom';
 
@@ -138,6 +139,14 @@ export default function App() {
               element={
                 <RoleGuard roles={['ADMIN', 'DISTRIBUTOR']}>
                   <Reports />
+                </RoleGuard>
+              }
+            />
+            <Route
+              path="/notifications"
+              element={
+                <RoleGuard roles={['ADMIN', 'DISTRIBUTOR', 'SUPERVISOR']}>
+                  <Notifications />
                 </RoleGuard>
               }
             />
