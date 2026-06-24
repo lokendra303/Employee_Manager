@@ -5,6 +5,8 @@
   "scripts": {
     "dev": "node --watch src/index.js",
     "start": "node src/index.js",
+    "postinstall": "prisma generate",
+    "vercel-build": "prisma generate",
     "db:generate": "node scripts/prisma-with-env.js generate",
     "db:migrate": "node scripts/prisma-with-env.js migrate dev && node scripts/prisma-with-env.js generate",
     "db:setup": "powershell -ExecutionPolicy Bypass -File scripts/setup-db.ps1",
