@@ -3,3 +3,11 @@ dist/
 .env
 *.log
 .DS_Store
+
+# Expo / React Native
+mobile/android/
+mobile/ios/
+mobile/.expo/
+mobile/releases/*.apk
+*.jks
+*.keystore

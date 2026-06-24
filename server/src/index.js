@@ -15,9 +15,34 @@ import { error } from './lib/response.js';
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+const defaultOrigins = [
+  'http://localhost:5173', // Vite web client
+  'http://localhost:8081', // Expo web
+  'http://localhost:19006', // Expo web (alternate port)
+];
+
+function getAllowedOrigins() {
+  const fromEnv = process.env.CLIENT_URL
+    ? process.env.CLIENT_URL.split(',').map((s) => s.trim()).filter(Boolean)
+    : [];
+  return [...new Set([...defaultOrigins, ...fromEnv])];
+}
+
+function isAllowedOrigin(origin) {
+  if (!origin) return true;
+  if (getAllowedOrigins().includes(origin)) return true;
+  return (
+    /^https?:\/\/localhost(:\d+)?$/i.test(origin) ||
+    /^https?:\/\/127\.0\.0\.1(:\d+)?$/i.test(origin) ||
+    /^https?:\/\/10\.0\.2\.2(:\d+)?$/i.test(origin)
+  );
+}
+
 app.use(
   cors({
-    origin: process.env.CLIENT_URL || 'http://localhost:5173',
+    origin(origin, callback) {
+      callback(null, isAllowedOrigin(origin));
+    },
     credentials: true,
   })
 );
@@ -25,6 +50,18 @@ app.use(express.json());
 
 app.get('/api/v1/health', (_req, res) => {
   res.json({ success: true, data: { status: 'ok' } });
+});
+
+app.get(['/api/v1', '/api/v1/'], (_req, res) => {
+  res.json({
+    success: true,
+    data: {
+      name: 'Attendance Manager API',
+      version: 'v1',
+      status: 'ok',
+      health: '/api/v1/health',
+    },
+  });
 });
 
 app.use('/api/v1/auth', authRoutes);
@@ -46,6 +83,7 @@ app.use((err, _req, res, _next) => {
   error(res, 'SERVER_ERROR', 'Internal server error', 500);
 });
 
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`Server running on http://localhost:${PORT}`);
+  console.log(`Network access: http://<your-pc-ip>:${PORT}/api/v1`);
 });

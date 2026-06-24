@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getEnvDefaultUrl } from '../constants/apiStorage';
 
@@ -19,6 +20,17 @@ export function setApiBaseUrl(url) {
   api.defaults.baseURL = url;
 }
 
+function networkErrorMessage(baseUrl) {
+  const url = baseUrl || currentBaseUrl;
+  if (Platform.OS === 'web') {
+    return `Cannot reach ${url}. Is backend running? Use http://localhost:5000/api/v1`;
+  }
+  if (Platform.OS === 'android' && /localhost|127\.0\.0\.1/i.test(url)) {
+    return 'On Android use http://10.0.2.2:5000/api/v1 — not localhost.';
+  }
+  return `Cannot reach ${url}. Backend running? Phone/emulator: use 10.0.2.2 or PC Wi‑Fi IP.`;
+}
+
 api.interceptors.request.use(async (config) => {
   config.baseURL = currentBaseUrl;
   const token = await AsyncStorage.getItem('token');
@@ -35,9 +47,7 @@ api.interceptors.response.use(
       return Promise.reject(new Error('Request timed out — check API server URL'));
     }
     if (!err.response) {
-      return Promise.reject(
-        new Error('Cannot reach API server — check URL and network')
-      );
+      return Promise.reject(new Error(networkErrorMessage()));
     }
     const message =
       err.response?.data?.error?.message || err.message || 'Request failed';
@@ -47,8 +57,20 @@ api.interceptors.response.use(
 
 export async function testApiConnection(baseUrl) {
   const client = axios.create({ baseURL: baseUrl, timeout: 10000 });
-  const res = await client.get('/health');
-  return res.data?.data?.status === 'ok';
+  try {
+    const res = await client.get('/health');
+    return res.data?.data?.status === 'ok';
+  } catch (err) {
+    if (err.response?.data?.error?.code === 'NOT_FOUND') {
+      throw new Error(
+        'Route not found — URL must end with /api/v1 (e.g. http://10.0.2.2:5000/api/v1)'
+      );
+    }
+    if (!err.response) {
+      throw new Error(networkErrorMessage(baseUrl));
+    }
+    throw err;
+  }
 }
 
 export default api;

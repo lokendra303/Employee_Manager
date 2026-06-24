@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import {
   ActivityIndicator,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -32,6 +33,9 @@ export default function ApiServerPicker({ onSaved, compact = false }) {
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
 
+  const usesLocalhost =
+    Platform.OS !== 'web' && /localhost|127\.0\.0\.1/i.test(inputUrl);
+
   const handleTest = async () => {
     setError('');
     setMessage('');
@@ -39,7 +43,7 @@ export default function ApiServerPicker({ onSaved, compact = false }) {
       await testUrl(inputUrl);
       setMessage('Connection successful');
     } catch (err) {
-      setError(err.message);
+      setError(err.message || 'Network Error');
     }
   };
 
@@ -51,7 +55,7 @@ export default function ApiServerPicker({ onSaved, compact = false }) {
       setMessage('API URL saved');
       onSaved?.();
     } catch (err) {
-      setError(err.message);
+      setError(err.message || 'Network Error');
     }
   };
 
@@ -91,15 +95,25 @@ export default function ApiServerPicker({ onSaved, compact = false }) {
             style={styles.input}
             value={inputUrl}
             onChangeText={setInputUrl}
-            placeholder="http://192.168.1.100:5000/api/v1"
+            placeholder="http://10.0.2.2:5000/api/v1"
             placeholderTextColor={colors.textMuted}
             autoCapitalize="none"
             autoCorrect={false}
             keyboardType="url"
           />
           <Text style={styles.hint}>
-            Type the full URL you use in Postman or browser, then save.
+            {Platform.OS === 'web'
+              ? 'Example: http://localhost:5000/api/v1'
+              : 'Example: http://10.0.2.2:5000/api/v1 (emulator) or http://YOUR_PC_IP:5000/api/v1 (phone). /api/v1 is added automatically if you omit it.'}
           </Text>
+          {usesLocalhost ? (
+            <View style={styles.warn}>
+              <Text style={styles.warnText}>
+                localhost points to the phone/emulator, not your PC. Use 10.0.2.2
+                (emulator) or your computer&apos;s Wi‑Fi IP instead.
+              </Text>
+            </View>
+          ) : null}
         </View>
 
         <View style={styles.actions}>
@@ -151,6 +165,15 @@ const styles = StyleSheet.create({
     color: colors.text,
   },
   hint: { fontSize: 11, color: colors.textMuted, marginTop: 4 },
+  warn: {
+    marginTop: 8,
+    padding: 10,
+    backgroundColor: '#fff7ed',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#fed7aa',
+  },
+  warnText: { fontSize: 12, color: '#c2410c', lineHeight: 18 },
   actions: { marginHorizontal: 16, marginTop: 20, gap: 10 },
   testBtn: {
     borderWidth: 1,
