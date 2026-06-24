@@ -12,13 +12,24 @@ export default function MoreScreen({ navigation }) {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
-      <Screen title="More" subtitle="Admin tools and settings">
+      <Screen
+        title="More"
+        subtitle={
+          user?.role === 'ADMIN'
+            ? 'Admin tools and settings'
+            : 'Tools, profile, and settings'
+        }
+      >
         <ScrollView contentContainerStyle={styles.list}>
           {links.map((link) => (
             <Pressable
               key={link.screen}
               style={styles.row}
-              onPress={() => navigation.navigate(link.screen)}
+              onPress={() => {
+                const parent = navigation.getParent();
+                if (parent) parent.navigate(link.screen);
+                else navigation.navigate(link.screen);
+              }}
             >
               <Text style={styles.rowText}>{link.title}</Text>
               <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />

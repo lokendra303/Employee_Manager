@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
-import { FlatList, StyleSheet, Text } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { FlatList, StyleSheet, Text, View } from 'react-native';
 import api from '../api/client';
-import { ErrorBanner, LoadingView, Screen } from '../components/ui';
+import PageShell from '../components/PageShell';
+import { ErrorBanner, LoadingView } from '../components/ui';
 import { colors } from '../theme';
 
 export default function ReportsScreen() {
@@ -21,13 +21,13 @@ export default function ReportsScreen() {
   if (loading) return <LoadingView label="Loading reports..." />;
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
-      <Screen title="Reports" subtitle="Days worked by worker">
-        <ErrorBanner message={error} />
-        <FlatList
-          data={rows}
-          keyExtractor={(item) => String(item.workerId)}
-          contentContainerStyle={styles.list}
+    <PageShell title="Reports" subtitle="Days worked by worker">
+      <ErrorBanner message={error} />
+      <FlatList
+        style={styles.list}
+        data={rows}
+        keyExtractor={(item) => String(item.workerId)}
+        contentContainerStyle={styles.listContent}
           ListEmptyComponent={<Text style={styles.empty}>No data yet</Text>}
           renderItem={({ item }) => (
             <View style={styles.row}>
@@ -37,14 +37,13 @@ export default function ReportsScreen() {
             </View>
           )}
         />
-      </Screen>
-    </SafeAreaView>
+    </PageShell>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.background },
-  list: { padding: 16 },
+  list: { flex: 1 },
+  listContent: { padding: 16, paddingBottom: 24 },
   row: {
     backgroundColor: '#fff',
     borderRadius: 10,

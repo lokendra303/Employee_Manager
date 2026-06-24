@@ -15,6 +15,13 @@ import { error } from './lib/response.js';
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+// Dynamic API responses must not be cached by browsers (304 + empty body breaks axios on web).
+app.set('etag', false);
+app.use((_req, res, next) => {
+  res.set('Cache-Control', 'no-store');
+  next();
+});
+
 const defaultOrigins = [
   'http://localhost:5173', // Vite web client
   'http://localhost:8081', // Expo web

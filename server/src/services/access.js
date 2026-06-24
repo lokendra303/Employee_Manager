@@ -66,6 +66,7 @@ export async function getWorkerForUser(user, workerId) {
 }
 
 export async function getLinkedDistributorSummary(userId, organizationId) {
+  if (!userId || organizationId == null) return null;
   const distributor = await prisma.distributor.findFirst({
     where: { userId, organizationId, isActive: true },
     select: { id: true, name: true },

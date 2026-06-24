@@ -43,7 +43,7 @@ export function Screen({ children, title, subtitle }) {
           {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
         </View>
       ) : null}
-      {children}
+      <View style={styles.content}>{children}</View>
     </View>
   );
 }
@@ -108,6 +108,7 @@ const styles = StyleSheet.create({
   },
   muted: { color: colors.textMuted, fontSize: 14 },
   screen: { flex: 1, backgroundColor: colors.background },
+  content: { flex: 1 },
   header: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 12 },
   title: { fontSize: 22, fontWeight: '700', color: colors.text },
   subtitle: { fontSize: 14, color: colors.textMuted, marginTop: 4 },

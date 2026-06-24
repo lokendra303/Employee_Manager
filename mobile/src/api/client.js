@@ -2,8 +2,33 @@ import axios from 'axios';
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getEnvDefaultUrl } from '../constants/apiStorage';
+import { AUTH_TOKEN_KEY } from '../constants/authStorage';
 
 let currentBaseUrl = getEnvDefaultUrl();
+let memoryToken = null;
+let onUnauthorized = null;
+
+export function setMemoryToken(token) {
+  memoryToken = token || null;
+}
+
+export function clearMemoryToken() {
+  memoryToken = null;
+}
+
+export function setUnauthorizedHandler(handler) {
+  onUnauthorized = handler;
+}
+
+export function isAuthFailure(err) {
+  if (!err) return false;
+  if (err.code === 'INVALID_CREDENTIALS') return false;
+  return (
+    err.code === 'INVALID_TOKEN' ||
+    err.code === 'UNAUTHORIZED' ||
+    (err.status === 401 && err.code !== 'INVALID_CREDENTIALS')
+  );
+}
 
 const api = axios.create({
   baseURL: currentBaseUrl,
@@ -33,7 +58,7 @@ function networkErrorMessage(baseUrl) {
 
 api.interceptors.request.use(async (config) => {
   config.baseURL = currentBaseUrl;
-  const token = await AsyncStorage.getItem('token');
+  const token = memoryToken || (await AsyncStorage.getItem(AUTH_TOKEN_KEY));
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
@@ -47,11 +72,20 @@ api.interceptors.response.use(
       return Promise.reject(new Error('Request timed out — check API server URL'));
     }
     if (!err.response) {
-      return Promise.reject(new Error(networkErrorMessage()));
+      const networkErr = new Error(networkErrorMessage());
+      networkErr.isNetworkError = true;
+      return Promise.reject(networkErr);
     }
+    const code = err.response?.data?.error?.code;
     const message =
       err.response?.data?.error?.message || err.message || 'Request failed';
-    return Promise.reject(new Error(message));
+    const apiErr = new Error(message);
+    apiErr.code = code;
+    apiErr.status = err.response?.status;
+    if (isAuthFailure(apiErr) && onUnauthorized) {
+      onUnauthorized(apiErr);
+    }
+    return Promise.reject(apiErr);
   }
 );
 

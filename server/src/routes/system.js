@@ -37,6 +37,10 @@ const rejectSchema = z.object({
   reason: z.string().min(3),
 });
 
+const suspendSchema = z.object({
+  reason: z.string().min(3).optional(),
+});
+
 router.post('/organizations/:id/approve', async (req, res) => {
   try {
     const id = Number(req.params.id);
@@ -107,17 +111,88 @@ router.post('/organizations/:id/reject', async (req, res) => {
   }
 });
 
+router.post('/organizations/:id/suspend', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const { reason } = suspendSchema.parse(req.body ?? {});
+
+    const org = await prisma.organization.findUnique({ where: { id } });
+    if (!org) return error(res, 'NOT_FOUND', 'Organization not found', 404);
+    if (org.status !== 'APPROVED') {
+      return error(res, 'INVALID_STATUS', 'Only approved organizations can be suspended', 400);
+    }
+
+    const updated = await prisma.organization.update({
+      where: { id },
+      data: {
+        status: 'SUSPENDED',
+        rejectedReason: reason?.trim() || 'Suspended by system administrator',
+      },
+    });
+
+    await createAuditLog({
+      userId: req.user.id,
+      entityType: 'Organization',
+      entityId: id,
+      action: 'SUSPEND',
+      newValue: { status: 'SUSPENDED', reason: updated.rejectedReason },
+    });
+
+    return success(res, updated);
+  } catch (err) {
+    if (err.name === 'ZodError') {
+      return error(res, 'VALIDATION_ERROR', err.errors[0].message);
+    }
+    return error(res, 'SERVER_ERROR', err.message, 500);
+  }
+});
+
+router.post('/organizations/:id/reactivate', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+
+    const org = await prisma.organization.findUnique({ where: { id } });
+    if (!org) return error(res, 'NOT_FOUND', 'Organization not found', 404);
+    if (org.status !== 'SUSPENDED') {
+      return error(res, 'INVALID_STATUS', 'Only suspended organizations can be reactivated', 400);
+    }
+
+    const updated = await prisma.organization.update({
+      where: { id },
+      data: {
+        status: 'APPROVED',
+        rejectedReason: null,
+        approvedAt: org.approvedAt ?? new Date(),
+        approvedById: org.approvedById ?? req.user.id,
+      },
+    });
+
+    await createAuditLog({
+      userId: req.user.id,
+      entityType: 'Organization',
+      entityId: id,
+      action: 'REACTIVATE',
+      newValue: { status: 'APPROVED' },
+    });
+
+    return success(res, updated);
+  } catch (err) {
+    return error(res, 'SERVER_ERROR', err.message, 500);
+  }
+});
+
 router.get('/stats', async (_req, res) => {
   try {
-    const [pending, approved, rejected, totalOrgs, totalUsers] = await Promise.all([
+    const [pending, approved, rejected, suspended, totalOrgs, totalUsers] = await Promise.all([
       prisma.organization.count({ where: { status: 'PENDING' } }),
       prisma.organization.count({ where: { status: 'APPROVED' } }),
       prisma.organization.count({ where: { status: 'REJECTED' } }),
+      prisma.organization.count({ where: { status: 'SUSPENDED' } }),
       prisma.organization.count(),
       prisma.user.count({ where: { role: { not: 'SYSTEM_ADMIN' } } }),
     ]);
 
-    return success(res, { pending, approved, rejected, totalOrgs, totalUsers });
+    return success(res, { pending, approved, rejected, suspended, totalOrgs, totalUsers });
   } catch (err) {
     return error(res, 'SERVER_ERROR', err.message, 500);
   }

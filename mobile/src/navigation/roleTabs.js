@@ -19,30 +19,21 @@ export function getTabsForUser(user) {
   }
 
   if (user.role === 'SUPERVISOR') {
-    const tabs = [
+    return [
+      { name: 'SupervisorHome', title: 'Home', icon: 'home' },
       { name: 'Attendance', title: 'Attendance', icon: 'calendar' },
       { name: 'PaySalary', title: 'Pay', icon: 'card' },
       { name: 'Wallet', title: 'Wallet', icon: 'wallet' },
-      { name: 'FundRequests', title: 'Funds', icon: 'cash' },
-      { name: 'Transactions', title: 'Payments', icon: 'list' },
+      { name: 'More', title: 'More', icon: 'menu' },
     ];
-    if (user.linkedDistributorId) {
-      tabs.splice(1, 0, {
-        name: 'DistributorHome',
-        title: 'Dist. Pay',
-        icon: 'briefcase',
-      });
-    }
-    return tabs.slice(0, 5);
   }
 
   if (user.role === 'DISTRIBUTOR') {
     return [
+      { name: 'DistributorDashboard', title: 'Home', icon: 'home' },
       { name: 'DistributorHome', title: 'Owed', icon: 'card' },
       { name: 'Wallet', title: 'Wallet', icon: 'wallet' },
-      { name: 'FundRequests', title: 'Funds', icon: 'cash' },
-      { name: 'Transactions', title: 'Ledger', icon: 'list' },
-      { name: 'Reports', title: 'Reports', icon: 'stats-chart' },
+      { name: 'More', title: 'More', icon: 'menu' },
     ];
   }
 
@@ -50,13 +41,37 @@ export function getTabsForUser(user) {
 }
 
 export function getMoreLinks(user) {
-  if (user?.role !== 'ADMIN') return [];
-  return [
-    { screen: 'Distributors', title: 'Distributors' },
-    { screen: 'Supervisors', title: 'Supervisors' },
-    { screen: 'Transactions', title: 'Payments' },
-    { screen: 'Reports', title: 'Reports' },
-    { screen: 'PaySalary', title: 'Pay Salary' },
-    { screen: 'Profile', title: 'My Profile' },
-  ];
+  if (user?.role === 'ADMIN') {
+    return [
+      { screen: 'AdminDistributors', title: 'Distributors' },
+      { screen: 'AdminSupervisors', title: 'Supervisors' },
+      { screen: 'AdminPayments', title: 'Payments' },
+      { screen: 'AdminReports', title: 'Reports' },
+      { screen: 'AdminPaySalary', title: 'Pay Salary' },
+      { screen: 'Profile', title: 'My Profile' },
+    ];
+  }
+
+  if (user?.role === 'SUPERVISOR') {
+    const links = [
+      { screen: 'FundRequests', title: 'Fund Requests' },
+      { screen: 'Transactions', title: 'Payments' },
+      { screen: 'Profile', title: 'My Profile' },
+    ];
+    if (user.linkedDistributorId) {
+      links.unshift({ screen: 'DistributorHome', title: 'Distributor Workers' });
+    }
+    return links;
+  }
+
+  if (user?.role === 'DISTRIBUTOR') {
+    return [
+      { screen: 'FundRequests', title: 'Fund Requests' },
+      { screen: 'Transactions', title: 'Payment Ledger' },
+      { screen: 'Reports', title: 'Reports' },
+      { screen: 'Profile', title: 'My Profile' },
+    ];
+  }
+
+  return [];
 }

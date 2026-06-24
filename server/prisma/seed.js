@@ -72,7 +72,7 @@ async function main() {
 
   const distributor1 = await prisma.distributor.upsert({
     where: { id: 1 },
-    update: { organizationId: org.id },
+    update: { organizationId: org.id, userId: distributorUser.id },
     create: {
       organizationId: org.id,
       name: 'Distributor A',

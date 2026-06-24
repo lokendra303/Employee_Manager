@@ -7,15 +7,23 @@ export default function SystemAdmin() {
   const [filter, setFilter] = useState('PENDING');
   const [rejectId, setRejectId] = useState(null);
   const [rejectReason, setRejectReason] = useState('');
+  const [suspendId, setSuspendId] = useState(null);
+  const [suspendReason, setSuspendReason] = useState('');
   const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
 
   const load = async () => {
-    const [statsRes, orgsRes] = await Promise.all([
-      api.get('/system/stats'),
-      api.get(`/system/organizations?status=${filter}`),
-    ]);
-    setStats(statsRes.data);
-    setOrganizations(orgsRes.data);
+    try {
+      setError('');
+      const [statsRes, orgsRes] = await Promise.all([
+        api.get('/system/stats'),
+        api.get(`/system/organizations?status=${filter}`),
+      ]);
+      setStats(statsRes.data);
+      setOrganizations(orgsRes.data);
+    } catch (err) {
+      setError(err.message);
+    }
   };
 
   useEffect(() => {
@@ -23,42 +31,81 @@ export default function SystemAdmin() {
   }, [filter]);
 
   const approve = async (id) => {
-    await api.post(`/system/organizations/${id}/approve`);
-    setMessage('Organization approved');
-    load();
+    try {
+      await api.post(`/system/organizations/${id}/approve`);
+      setMessage('Organization approved');
+      load();
+    } catch (err) {
+      setError(err.message);
+    }
   };
 
   const reject = async (e) => {
     e.preventDefault();
-    await api.post(`/system/organizations/${rejectId}/reject`, { reason: rejectReason });
-    setRejectId(null);
-    setRejectReason('');
-    setMessage('Organization rejected');
-    load();
+    try {
+      await api.post(`/system/organizations/${rejectId}/reject`, { reason: rejectReason });
+      setRejectId(null);
+      setRejectReason('');
+      setMessage('Organization rejected');
+      load();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const suspend = async (e) => {
+    e.preventDefault();
+    try {
+      await api.post(`/system/organizations/${suspendId}/suspend`, {
+        reason: suspendReason.trim() || undefined,
+      });
+      setSuspendId(null);
+      setSuspendReason('');
+      setMessage('Organization suspended');
+      load();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const reactivate = async (id) => {
+    try {
+      await api.post(`/system/organizations/${id}/reactivate`);
+      setMessage('Organization reactivated');
+      load();
+    } catch (err) {
+      setError(err.message);
+    }
   };
 
   return (
     <div className="space-y-6">
       <div>
         <h2 className="text-xl font-bold">System Administration</h2>
-        <p className="text-sm text-gray-500 mt-1">Approve or reject organization registrations</p>
+        <p className="text-sm text-gray-500 mt-1">
+          Approve registrations, suspend organizations, or reactivate access
+        </p>
       </div>
 
       {message && (
         <div className="bg-green-50 text-green-700 px-4 py-3 rounded-lg text-sm">{message}</div>
       )}
+      {error && (
+        <div className="bg-red-50 text-red-700 px-4 py-3 rounded-lg text-sm">{error}</div>
+      )}
 
       {stats && (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
           <div className="card"><p className="text-sm text-gray-500">Pending</p><p className="text-2xl font-bold text-orange-600">{stats.pending}</p></div>
           <div className="card"><p className="text-sm text-gray-500">Approved</p><p className="text-2xl font-bold text-green-600">{stats.approved}</p></div>
+          <div className="card"><p className="text-sm text-gray-500">Suspended</p><p className="text-2xl font-bold text-amber-600">{stats.suspended ?? 0}</p></div>
           <div className="card"><p className="text-sm text-gray-500">Rejected</p><p className="text-2xl font-bold text-red-600">{stats.rejected}</p></div>
           <div className="card"><p className="text-sm text-gray-500">Total Users</p><p className="text-2xl font-bold">{stats.totalUsers}</p></div>
         </div>
       )}
 
-      <div className="flex gap-2">
-        {['PENDING', 'APPROVED', 'REJECTED'].map((s) => (
+      <div className="flex flex-wrap gap-2">
+        {['PENDING', 'APPROVED', 'SUSPENDED', 'REJECTED'].map((s) => (
           <button
             key={s}
             type="button"
@@ -91,7 +138,7 @@ export default function SystemAdmin() {
                       Admin: <span className="font-medium">{org.users[0].name}</span> ({org.users[0].email})
                     </p>
                   )}
-                  {org.rejectedReason && (
+                  {org.rejectedReason && (org.status === 'REJECTED' || org.status === 'SUSPENDED') && (
                     <p className="text-sm text-red-600 mt-2">Reason: {org.rejectedReason}</p>
                   )}
                 </div>
@@ -106,6 +153,24 @@ export default function SystemAdmin() {
                       onClick={() => setRejectId(org.id)}
                     >
                       Reject
+                    </button>
+                  </div>
+                )}
+                {org.status === 'APPROVED' && (
+                  <div className="flex flex-col gap-2 sm:w-40">
+                    <button
+                      type="button"
+                      className="btn-danger"
+                      onClick={() => setSuspendId(org.id)}
+                    >
+                      Suspend
+                    </button>
+                  </div>
+                )}
+                {org.status === 'SUSPENDED' && (
+                  <div className="flex flex-col gap-2 sm:w-40">
+                    <button type="button" className="btn-primary" onClick={() => reactivate(org.id)}>
+                      Reactivate
                     </button>
                   </div>
                 )}
@@ -134,6 +199,32 @@ export default function SystemAdmin() {
                 Cancel
               </button>
               <button type="submit" className="btn-danger flex-1">Reject</button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {suspendId && (
+        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center p-4 z-50">
+          <form onSubmit={suspend} className="card w-full max-w-md space-y-4">
+            <h3 className="font-semibold">Suspend Organization</h3>
+            <p className="text-sm text-gray-500">
+              Users in this organization will not be able to sign in until you reactivate it.
+            </p>
+            <div>
+              <label className="label">Reason (optional)</label>
+              <textarea
+                className="input min-h-[100px]"
+                value={suspendReason}
+                onChange={(e) => setSuspendReason(e.target.value)}
+                placeholder="e.g. Payment overdue"
+              />
+            </div>
+            <div className="flex gap-2">
+              <button type="button" className="btn-secondary flex-1" onClick={() => setSuspendId(null)}>
+                Cancel
+              </button>
+              <button type="submit" className="btn-danger flex-1">Suspend</button>
             </div>
           </form>
         </div>

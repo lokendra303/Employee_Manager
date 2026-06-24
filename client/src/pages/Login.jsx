@@ -111,13 +111,6 @@ export default function Login() {
               </Link>
             </p>
           </div>
-
-          <div className="mt-6 p-4 rounded-xl bg-ink-100/60 border border-ink-200/50 text-xs text-ink-500 space-y-1">
-            <p className="font-semibold text-ink-700 text-sm mb-2">Demo accounts</p>
-            <p>System Admin — system@attendance.com / system123</p>
-            <p>Org Admin — admin@attendance.com / admin123</p>
-            <p>Supervisor — supervisor@attendance.com / super123</p>
-          </div>
         </div>
       </div>
     </div>

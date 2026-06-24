@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
-import { FlatList, StyleSheet, Text } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { FlatList, StyleSheet, Text, View } from 'react-native';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext';
-import { ErrorBanner, LoadingView, Screen } from '../components/ui';
+import PageShell from '../components/PageShell';
+import { ErrorBanner, LoadingView } from '../components/ui';
 import { colors } from '../theme';
 
 const METHOD_LABELS = {
@@ -37,13 +37,13 @@ export default function TransactionsScreen() {
         : 'Your distributor payment ledger';
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
-      <Screen title="Payments" subtitle={subtitle}>
-        <ErrorBanner message={error} />
-        <FlatList
-          data={transactions}
+    <PageShell title="Payments" subtitle={subtitle}>
+      <ErrorBanner message={error} />
+      <FlatList
+        style={styles.list}
+        data={transactions}
           keyExtractor={(item) => String(item.id)}
-          contentContainerStyle={styles.list}
+          contentContainerStyle={styles.listContent}
           ListEmptyComponent={<Text style={styles.empty}>No transactions yet</Text>}
           renderItem={({ item }) => (
             <View style={styles.row}>
@@ -58,14 +58,13 @@ export default function TransactionsScreen() {
             </View>
           )}
         />
-      </Screen>
-    </SafeAreaView>
+    </PageShell>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.background },
-  list: { padding: 16 },
+  list: { flex: 1 },
+  listContent: { padding: 16, paddingBottom: 24 },
   row: {
     flexDirection: 'row',
     justifyContent: 'space-between',

@@ -20,6 +20,8 @@ import MoreScreen from '../screens/MoreScreen';
 import SystemAdminScreen from '../screens/SystemAdminScreen';
 import DistributorsScreen from '../screens/DistributorsScreen';
 import SupervisorsScreen from '../screens/SupervisorsScreen';
+import SupervisorHomeScreen from '../screens/SupervisorHomeScreen';
+import DistributorDashboardScreen from '../screens/DistributorDashboardScreen';
 import ApiSettingsScreen from '../screens/ApiSettingsScreen';
 
 const Tab = createBottomTabNavigator();
@@ -38,6 +40,8 @@ const screenMap = {
   Reports: ReportsScreen,
   Profile: ProfileScreen,
   SystemAdmin: SystemAdminScreen,
+  SupervisorHome: SupervisorHomeScreen,
+  DistributorDashboard: DistributorDashboardScreen,
 };
 
 function RoleTabs() {
@@ -72,7 +76,11 @@ function RoleTabs() {
 
 export default function AppNavigator() {
   return (
-    <Stack.Navigator>
+    <Stack.Navigator
+      screenOptions={{
+        contentStyle: { flex: 1, backgroundColor: colors.background },
+      }}
+    >
       <Stack.Screen
         name="MainTabs"
         component={RoleTabs}
@@ -84,14 +92,39 @@ export default function AppNavigator() {
         options={{ title: 'Worker Profile' }}
       />
       <Stack.Screen
-        name="Distributors"
+        name="AdminDistributors"
         component={DistributorsScreen}
         options={{ title: 'Distributors' }}
       />
       <Stack.Screen
-        name="Supervisors"
+        name="AdminSupervisors"
         component={SupervisorsScreen}
         options={{ title: 'Supervisors' }}
+      />
+      <Stack.Screen
+        name="AdminPayments"
+        component={TransactionsScreen}
+        options={{ title: 'Payments' }}
+      />
+      <Stack.Screen
+        name="AdminReports"
+        component={ReportsScreen}
+        options={{ title: 'Reports' }}
+      />
+      <Stack.Screen
+        name="AdminPaySalary"
+        component={PaySalaryScreen}
+        options={{ title: 'Pay Salary' }}
+      />
+      <Stack.Screen
+        name="FundRequests"
+        component={FundRequestsScreen}
+        options={{ title: 'Fund Requests' }}
+      />
+      <Stack.Screen
+        name="DistributorHome"
+        component={DistributorHomeScreen}
+        options={{ title: 'Distributor Workers' }}
       />
       <Stack.Screen
         name="Transactions"
@@ -102,11 +135,6 @@ export default function AppNavigator() {
         name="Reports"
         component={ReportsScreen}
         options={{ title: 'Reports' }}
-      />
-      <Stack.Screen
-        name="PaySalary"
-        component={PaySalaryScreen}
-        options={{ title: 'Pay Salary' }}
       />
       <Stack.Screen
         name="Profile"

@@ -1,25 +1,41 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
+  Pressable,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   View,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../context/AuthContext';
 import { useApiConfig } from '../context/ApiConfigContext';
 import ApiServerPicker from '../components/ApiServerPicker';
 import { ErrorBanner, PrimaryButton, Screen } from '../components/ui';
+import { AUTH_LAST_EMAIL_KEY, AUTH_REMEMBER_KEY } from '../constants/authStorage';
 import { colors } from '../theme';
 
 export default function LoginScreen({ navigation }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [rememberMe, setRememberMe] = useState(true);
   const [error, setError] = useState('');
   const { login, loading } = useAuth();
   const { apiBaseUrl } = useApiConfig();
+
+  useEffect(() => {
+    (async () => {
+      const [savedEmail, savedRemember] = await Promise.all([
+        AsyncStorage.getItem(AUTH_LAST_EMAIL_KEY),
+        AsyncStorage.getItem(AUTH_REMEMBER_KEY),
+      ]);
+      if (savedEmail) setEmail(savedEmail);
+      if (savedRemember === 'false') setRememberMe(false);
+    })();
+  }, []);
 
   const handleSubmit = async () => {
     setError('');
@@ -28,7 +44,7 @@ export default function LoginScreen({ navigation }) {
       return;
     }
     try {
-      await login(email.trim(), password);
+      await login(email.trim(), password, rememberMe);
     } catch (err) {
       setError(err.message);
     }
@@ -81,19 +97,35 @@ export default function LoginScreen({ navigation }) {
               placeholderTextColor={colors.textMuted}
             />
 
+            <View style={styles.rememberRow}>
+              <View style={styles.rememberText}>
+                <Text style={styles.rememberLabel}>Keep me signed in on this device</Text>
+                <Text style={styles.rememberHint}>
+                  Stay logged in until you sign out. Uncheck for a one-time session only.
+                </Text>
+              </View>
+              <Switch
+                value={rememberMe}
+                onValueChange={setRememberMe}
+                trackColor={{ false: colors.border, true: colors.primary }}
+              />
+            </View>
+
             <PrimaryButton
               title="Sign in"
               onPress={handleSubmit}
               loading={loading}
               disabled={!email || !password}
             />
-          </View>
 
-          <View style={styles.demo}>
-            <Text style={styles.demoTitle}>Demo accounts</Text>
-            <Text style={styles.demoLine}>Admin — admin@attendance.com / admin123</Text>
-            <Text style={styles.demoLine}>Supervisor — supervisor@attendance.com / super123</Text>
-            <Text style={styles.demoLine}>Distributor — distributor@attendance.com / dist123</Text>
+            <Pressable
+              onPress={() => navigation.navigate('Register')}
+              style={styles.registerLink}
+            >
+              <Text style={styles.registerText}>
+                New organization? <Text style={styles.registerCta}>Register here</Text>
+              </Text>
+            </Pressable>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -129,12 +161,22 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     color: colors.text,
   },
-  demo: {
-    marginTop: 32,
-    padding: 16,
-    backgroundColor: '#f1f5f9',
-    borderRadius: 12,
+  registerLink: { marginTop: 16, alignItems: 'center' },
+  registerText: { fontSize: 14, color: colors.textMuted },
+  registerCta: { color: colors.primary, fontWeight: '600' },
+  rememberRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 10,
+    backgroundColor: '#fff',
+    gap: 12,
   },
-  demoTitle: { fontWeight: '600', marginBottom: 8, color: colors.text },
-  demoLine: { fontSize: 12, color: colors.textMuted, marginBottom: 4 },
+  rememberText: { flex: 1 },
+  rememberLabel: { fontSize: 14, fontWeight: '600', color: colors.text },
+  rememberHint: { fontSize: 11, color: colors.textMuted, marginTop: 4, lineHeight: 15 },
 });
