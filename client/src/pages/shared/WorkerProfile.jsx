@@ -8,7 +8,6 @@ import {
   Badge,
   Icon,
   LoadingState,
-  PageHeader,
   StatCard,
 } from '../../components/ui';
 
@@ -30,6 +29,63 @@ const METHOD_LABELS = {
   BANK: 'Bank Transfer',
   OTHER: 'Other',
 };
+
+const METHOD_ICONS = {
+  CASH: 'cash',
+  UPI: 'phone',
+  BANK: 'bank',
+  OTHER: 'list',
+};
+
+function PaymentTimeline({ transactions }) {
+  if (!transactions?.length) {
+    return (
+      <div className="text-center py-14 px-6">
+        <div className="w-14 h-14 rounded-2xl bg-ink-100 flex items-center justify-center mx-auto mb-3">
+          <Icon name="banknote" className="w-7 h-7 text-ink-400" />
+        </div>
+        <p className="font-semibold text-ink-600">No payments yet</p>
+        <p className="text-sm text-ink-400 mt-1">Salary disbursements will appear here</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative px-2">
+      <div className="absolute left-[19px] top-3 bottom-3 w-0.5 bg-gradient-to-b from-rose-200 via-primary-200 to-emerald-200 rounded-full" />
+      <div className="space-y-0">
+        {transactions.map((t, idx) => (
+          <div
+            key={t.id}
+            className="relative flex gap-4 py-4 pl-10 hover:bg-ink-50/60 rounded-xl transition-colors -ml-2 pr-2"
+          >
+            <div className="absolute left-2.5 top-5 w-4 h-4 rounded-full bg-white border-[3px] border-rose-400 shadow-sm z-10" />
+            <div className="flex-1 min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xl font-bold text-rose-600 tabular-nums">−{formatMoney(t.amount)}</span>
+                <Badge tone="brand">{METHOD_LABELS[t.paymentMethod] || t.paymentMethod}</Badge>
+              </div>
+              <p className="text-sm text-ink-600 mt-1">
+                {t.createdBy?.name ? `Paid by ${t.createdBy.name}` : 'Payment recorded'}
+                {t.distributor?.name ? ` · ${t.distributor.name}` : ''}
+              </p>
+              {t.notes && <p className="text-xs text-ink-500 mt-1.5 bg-ink-50 rounded-lg px-3 py-2 border border-ink-100">{t.notes}</p>}
+              <p className="text-[11px] text-ink-400 mt-2 flex items-center gap-1.5">
+                <Icon name={METHOD_ICONS[t.paymentMethod] || 'card'} className="w-3.5 h-3.5" />
+                {new Date(t.createdAt).toLocaleString()}
+              </p>
+            </div>
+            {idx === 0 && (
+              <span className="text-[10px] font-bold uppercase tracking-wider text-primary-600 bg-primary-50 px-2 py-1 rounded-lg h-fit">
+                Latest
+              </span>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 function monthBounds(year, month) {
   const from = new Date(year, month, 1);
@@ -148,25 +204,36 @@ export default function WorkerProfile() {
 
   return (
     <div className="page-shell space-y-6">
-      <div>
-        <button
-          type="button"
-          onClick={() => navigate(user?.role === 'ADMIN' ? '/workers' : -1)}
-          className="text-sm text-primary-600 font-semibold hover:underline"
-        >
-          ← Back to workers
-        </button>
-      </div>
+      <button
+        type="button"
+        onClick={() => navigate(user?.role === 'ADMIN' ? '/workers' : -1)}
+        className="inline-flex items-center gap-1.5 text-sm text-primary-600 font-semibold hover:underline"
+      >
+        <span>←</span> Back to workers
+      </button>
 
-      <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-        <Avatar name={worker.name} size="lg" />
-        <div className="flex-1">
-          <PageHeader
-            title={worker.name}
-            subtitle={`${formatMoney(worker.dailyRate)}/day · ${worker.distributor?.name || '—'} · Pay every ${worker.payoutIntervalDays} days`}
-            badge={worker.status === 'ACTIVE' ? 'Active' : 'Inactive'}
-          />
-          {worker.phone && <p className="text-sm text-ink-500 -mt-2">{worker.phone}</p>}
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary-600 via-primary-700 to-teal-800 text-white p-6 sm:p-8 shadow-card">
+        <div className="absolute -right-8 -top-8 w-40 h-40 rounded-full bg-white/10 blur-2xl" />
+        <div className="absolute -left-4 bottom-0 w-32 h-32 rounded-full bg-teal-400/20 blur-xl" />
+        <div className="relative flex flex-col sm:flex-row sm:items-center gap-5">
+          <div className="ring-4 ring-white/20 rounded-2xl">
+            <Avatar name={worker.name} size="lg" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">{worker.name}</h1>
+              <Badge tone={worker.status === 'ACTIVE' ? 'success' : 'neutral'}>
+                {worker.status === 'ACTIVE' ? 'Active' : 'Inactive'}
+              </Badge>
+            </div>
+            <p className="text-primary-100 mt-1.5 text-sm sm:text-base">
+              {formatMoney(worker.dailyRate)}/day · {worker.distributor?.name || '—'} · Pay every {worker.payoutIntervalDays} days
+            </p>
+            {worker.phone && <p className="text-primary-200/90 text-sm mt-1">{worker.phone}</p>}
+            <p className="text-xs text-primary-200/70 mt-2">
+              Pay period {worker.currentPeriod?.start} → {worker.currentPeriod?.end}
+            </p>
+          </div>
         </div>
       </div>
 
@@ -294,43 +361,24 @@ export default function WorkerProfile() {
       </div>
 
       <div className="card p-0 overflow-hidden">
-        <div className="px-5 py-4 border-b border-ink-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+        <div className="px-5 py-4 border-b border-ink-100 bg-gradient-to-r from-ink-50 to-white flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
           <div>
-            <h3 className="font-semibold text-ink-900">Payment History</h3>
+            <h3 className="font-semibold text-ink-900 flex items-center gap-2">
+              <Icon name="banknote" className="w-5 h-5 text-primary-600" />
+              Payment History
+            </h3>
             <p className="text-sm text-ink-500">
               {transactions.length} payments · {formatMoney(worker.totalDisbursed)} total disbursed
             </p>
           </div>
           {user?.role === 'ADMIN' && (
-            <Link to="/pay-salary" className="text-sm text-primary-600 font-semibold hover:underline">
+            <Link to="/pay" className="text-sm text-primary-600 font-semibold hover:underline">
               Record payment →
             </Link>
           )}
         </div>
 
-        {transactions.length === 0 ? (
-          <p className="text-sm text-ink-500 text-center py-12">No payments recorded for this worker yet</p>
-        ) : (
-          <div className="divide-y divide-ink-50">
-            {transactions.map((t) => (
-              <div key={t.id} className="flex items-start justify-between gap-4 px-5 py-4 hover:bg-ink-50/50 transition">
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Badge tone="danger">Paid</Badge>
-                    <span className="font-bold text-rose-700 tabular-nums">−{formatMoney(t.amount)}</span>
-                  </div>
-                  <p className="text-sm text-ink-600 mt-1">
-                    {METHOD_LABELS[t.paymentMethod] || t.paymentMethod || 'Payment'}
-                    {t.createdBy ? ` · by ${t.createdBy.name}` : ''}
-                    {t.distributor ? ` · ${t.distributor.name}` : ''}
-                  </p>
-                  {t.notes && <p className="text-xs text-ink-400 mt-1 line-clamp-2">{t.notes}</p>}
-                  <p className="text-[11px] text-ink-400 mt-1">{new Date(t.createdAt).toLocaleString()}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+        <PaymentTimeline transactions={transactions} />
       </div>
     </div>
   );

@@ -121,7 +121,7 @@ export default function AppNavigator() {
       <Stack.Screen
         name="AdminDistributors"
         component={DistributorsScreen}
-        options={{ title: 'Distributors' }}
+        options={{ title: 'Projects / Sites' }}
       />
       <Stack.Screen
         name="AdminSupervisors"

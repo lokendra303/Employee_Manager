@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../../api/client';
 import { Alert, Badge, Icon, PageHeader } from '../../components/ui';
 
@@ -8,6 +8,7 @@ const emptyEditForm = { name: '', contactPhone: '', contactEmail: '' };
 
 export default function Distributors() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [distributors, setDistributors] = useState([]);
   const [supervisors, setSupervisors] = useState([]);
   const [form, setForm] = useState(emptyForm);
@@ -34,6 +35,13 @@ export default function Distributors() {
   useEffect(() => {
     load();
   }, []);
+
+  useEffect(() => {
+    if (searchParams.get('add') === '1') {
+      setShowForm(true);
+      setSearchParams({}, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -89,13 +97,13 @@ export default function Distributors() {
   return (
     <div className="page-shell">
       <PageHeader
-        badge="Team"
-        title="Distributors"
-        subtitle="Manage field distributors, link supervisor accounts, and track worker payments."
+        badge="Sites"
+        title="Projects / Sites"
+        subtitle="Each project (site) groups workers. Add a project first, then add workers under it."
         action={
           <button className="btn-primary" onClick={() => setShowForm(!showForm)}>
             <Icon name="briefcase" className="w-4 h-4" />
-            {showForm ? 'Cancel' : 'Add Distributor'}
+            {showForm ? 'Cancel' : 'Add Project'}
           </button>
         }
       />
@@ -105,7 +113,7 @@ export default function Distributors() {
 
       {showForm && (
         <form onSubmit={handleSubmit} className="card space-y-4">
-          <h3 className="font-semibold text-ink-900">New Distributor</h3>
+          <h3 className="font-semibold text-ink-900">New Project / Site</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="label">Name</label>
@@ -136,7 +144,7 @@ export default function Distributors() {
               <p className="text-xs text-ink-500 mt-1">A supervisor can also act as this distributor after linking.</p>
             </div>
           </div>
-          <button type="submit" className="btn-primary">Create Distributor</button>
+          <button type="submit" className="btn-primary">Create Project</button>
         </form>
       )}
 

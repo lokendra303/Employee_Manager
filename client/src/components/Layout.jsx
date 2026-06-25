@@ -11,7 +11,7 @@ const navItems = {
   ADMIN: [
     { to: '/', label: 'Dashboard', icon: 'dashboard' },
     { to: '/workers', label: 'Workers', icon: 'workers' },
-    { to: '/distributors', label: 'Distributors', icon: 'briefcase' },
+    { to: '/distributors', label: 'Projects / Sites', icon: 'briefcase' },
     { to: '/attendance', label: 'Attendance', icon: 'calendar' },
     { to: '/supervisors', label: 'Supervisors', icon: 'user' },
     { to: '/fund-requests', label: 'Fund Requests', icon: 'banknote' },

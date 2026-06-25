@@ -92,7 +92,7 @@ export default function DistributorsScreen() {
       setForm(emptyForm);
       setShowForm(false);
       setShowSupervisorPicker(false);
-      setMessage('Distributor created');
+      setMessage('Project created');
       await load();
     } catch (err) {
       setError(err.message);
@@ -202,8 +202,8 @@ export default function DistributorsScreen() {
 
   return (
     <PageShell
-      title="Distributors"
-      subtitle="Manage field distributors and track worker payments"
+      title="Projects / Sites"
+      subtitle="Each project groups workers. Add a project first, then add workers under it."
     >
       <ScrollView contentContainerStyle={styles.scroll}>
         <ErrorBanner message={error} />
@@ -216,18 +216,18 @@ export default function DistributorsScreen() {
             setShowSupervisorPicker(false);
           }}
         >
-          <Text style={styles.addToggleText}>{showForm ? 'Cancel' : '+ Add Distributor'}</Text>
+          <Text style={styles.addToggleText}>{showForm ? 'Cancel' : '+ Add Project / Site'}</Text>
         </Pressable>
 
         {showForm ? (
           <View style={styles.form}>
-            <Text style={styles.formTitle}>New Distributor</Text>
-            <Text style={styles.label}>Name</Text>
+            <Text style={styles.formTitle}>New Project / Site</Text>
+            <Text style={styles.label}>Project name</Text>
             <TextInput
               style={styles.input}
               value={form.name}
               onChangeText={(name) => setForm({ ...form, name })}
-              placeholder="Distributor name"
+              placeholder="e.g. Site A, Highway Project"
             />
             <Text style={styles.label}>Phone</Text>
             <TextInput
@@ -291,7 +291,7 @@ export default function DistributorsScreen() {
                 ))}
               </View>
             ) : null}
-            <PrimaryButton title="Create Distributor" onPress={handleCreate} loading={creating} />
+            <PrimaryButton title="Create Project" onPress={handleCreate} loading={creating} />
           </View>
         ) : null}
 

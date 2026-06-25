@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, View, Pressable, Text } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import api from '../api/client';
 import ScreenLayout from '../components/ScreenLayout';
-import { ErrorBanner, LoadingView, SectionTitle, StatCard } from '../components/ui';
+import { ErrorBanner, LoadingView, QuickActionCard, SectionTitle, StatCard } from '../components/ui';
 import { spacing } from '../theme';
 
 export default function DashboardScreen({ navigation }) {
@@ -30,6 +31,25 @@ export default function DashboardScreen({ navigation }) {
       edges={[]}
     >
       <ErrorBanner message={error} />
+
+      <SectionTitle title="Quick actions" />
+      <View style={styles.quick}>
+        <QuickActionCard
+          icon="business-outline"
+          label="Add Project / Site"
+          sub="Create job site first"
+          onPress={() => navigation.getParent()?.navigate('AdminDistributors')}
+          delay={0}
+        />
+        <QuickActionCard
+          icon="person-add-outline"
+          label="Add Worker"
+          sub="Assign to a project"
+          onPress={() => navigation.navigate('Workers')}
+          delay={60}
+        />
+      </View>
+
       <SectionTitle title="Overview" />
       <View style={styles.stats}>
         <StatCard
@@ -40,7 +60,7 @@ export default function DashboardScreen({ navigation }) {
           delay={0}
         />
         <StatCard
-          label="Distributors"
+          label="Projects / Sites"
           value={String(summary?.distributorCount ?? 0)}
           icon="briefcase-outline"
           delay={80}
@@ -67,6 +87,7 @@ export default function DashboardScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
+  quick: { gap: spacing.sm, marginBottom: spacing.md },
   stats: {
     flexDirection: 'row',
     flexWrap: 'wrap',

@@ -1,25 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../../api/client';
-
-function StatCard({ label, value, sub, color = 'primary' }) {
-  const colors = {
-    primary: 'bg-primary-50 text-primary-700',
-    green: 'bg-green-50 text-green-700',
-    orange: 'bg-orange-50 text-orange-700',
-    red: 'bg-red-50 text-red-700',
-  };
-
-  return (
-    <div className="card">
-      <p className="text-sm text-gray-500">{label}</p>
-      <p className={`text-2xl font-bold mt-1 ${colors[color]?.split(' ')[1] || 'text-gray-900'}`}>
-        {value}
-      </p>
-      {sub && <p className="text-xs text-gray-400 mt-1">{sub}</p>}
-    </div>
-  );
-}
+import { Icon, PageHeader, StatCard } from '../../components/ui';
 
 export default function Dashboard() {
   const [summary, setSummary] = useState(null);
@@ -38,33 +20,72 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-xl font-bold">Dashboard</h2>
-          {summary?.organizationName && (
-            <p className="text-sm text-gray-500">{summary.organizationName}</p>
-          )}
-        </div>
-        <Link to="/attendance" className="btn-primary text-sm">
-          Mark Attendance
+    <div className="page-shell space-y-6">
+      <PageHeader
+        badge="Admin"
+        title="Dashboard"
+        subtitle={summary?.organizationName || 'Organization overview'}
+        action={
+          <Link to="/attendance" className="btn-primary text-sm">
+            <Icon name="calendar" className="w-4 h-4" />
+            Mark Attendance
+          </Link>
+        }
+      />
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <Link
+          to="/distributors?add=1"
+          className="card-elevated flex items-center gap-4 p-5 hover:border-emerald-200 transition group"
+        >
+          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-emerald-100 to-emerald-50 flex items-center justify-center">
+            <Icon name="briefcase" className="w-7 h-7 text-emerald-700" />
+          </div>
+          <div>
+            <p className="font-bold text-lg text-ink-900">Add Project / Site</p>
+            <p className="text-sm text-ink-500 mt-0.5">Create a job site before adding workers</p>
+          </div>
+        </Link>
+        <Link
+          to="/workers?add=1"
+          className="card-elevated flex items-center gap-4 p-5 hover:border-primary-200 transition group"
+        >
+          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-primary-100 to-primary-50 flex items-center justify-center">
+            <Icon name="workers" className="w-7 h-7 text-primary-700" />
+          </div>
+          <div>
+            <p className="font-bold text-lg text-ink-900">Add Worker</p>
+            <p className="text-sm text-ink-500 mt-0.5">Register employee and assign to a project</p>
+          </div>
         </Link>
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard label="Active Workers" value={summary?.workerCount ?? 0} color="primary" />
-        <StatCard label="Distributors" value={summary?.distributorCount ?? 0} color="green" />
+        <StatCard
+          label="Active Workers"
+          value={summary?.workerCount ?? 0}
+          variant="brand"
+          icon={<Icon name="workers" className="w-5 h-5" />}
+        />
+        <StatCard
+          label="Projects / Sites"
+          value={summary?.distributorCount ?? 0}
+          variant="success"
+          icon={<Icon name="briefcase" className="w-5 h-5" />}
+        />
         <StatCard
           label="Marked Today"
           value={summary?.todayAttendance ?? 0}
           sub={`${summary?.unmarkedToday ?? 0} unmarked`}
-          color="orange"
+          variant="warning"
+          icon={<Icon name="calendar" className="w-5 h-5" />}
         />
         <StatCard
           label="Pending Pay"
           value={`₹${(summary?.pendingAccrualTotal ?? 0).toLocaleString()}`}
           sub={`${summary?.pendingAccrualCount ?? 0} accruals`}
-          color="red"
+          variant="danger"
+          icon={<Icon name="banknote" className="w-5 h-5" />}
         />
       </div>
 

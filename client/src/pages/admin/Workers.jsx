@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import api from '../../api/client';
 import {
   Alert,
@@ -62,7 +62,142 @@ function AttendanceMiniBar({ monthAttendance }) {
   );
 }
 
+function PaymentProgress({ paid, unpaid }) {
+  const total = (paid || 0) + (unpaid || 0);
+  if (!total) {
+    return <p className="text-xs text-ink-400">No salary recorded yet</p>;
+  }
+  const pct = Math.min(100, Math.round((paid / total) * 100));
+
+  return (
+    <div className="space-y-1.5">
+      <div className="flex justify-between items-center text-xs">
+        <span className="font-medium text-ink-500">Salary settled</span>
+        <span className="font-bold text-emerald-700">{pct}%</span>
+      </div>
+      <div className="h-2.5 rounded-full bg-ink-100 overflow-hidden">
+        <div
+          className="h-full rounded-full bg-gradient-to-r from-emerald-400 via-emerald-500 to-teal-500 transition-all duration-500"
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+      <div className="flex justify-between text-[10px] text-ink-400">
+        <span>{formatMoney(paid)} paid</span>
+        <span>{formatMoney(unpaid)} due</span>
+      </div>
+    </div>
+  );
+}
+
+function WorkerCard({ worker: w, onEdit, onDeactivate, onReactivate }) {
+  const att = w.monthAttendance || { present: 0, halfDay: 0, absent: 0 };
+  const attTotal = att.present + att.halfDay + att.absent;
+
+  return (
+    <article
+      className={`group relative overflow-hidden rounded-2xl border border-ink-100/80 bg-white shadow-card hover:shadow-card-hover transition-all duration-300 hover:-translate-y-1 ${
+        w.status === 'INACTIVE' ? 'opacity-80' : ''
+      }`}
+    >
+      <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-primary-400 via-primary-500 to-teal-400 opacity-90" />
+
+      <div className="p-5 flex flex-col gap-4 h-full">
+        <div className="flex items-start gap-3">
+          <Avatar name={w.name} size="md" />
+          <div className="flex-1 min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <Link
+                to={`/workers/${w.id}`}
+                className="font-bold text-lg text-ink-900 group-hover:text-primary-700 truncate transition-colors"
+              >
+                {w.name}
+              </Link>
+              <Badge tone={w.status === 'ACTIVE' ? 'success' : 'neutral'}>
+                {w.status === 'ACTIVE' ? 'Active' : 'Inactive'}
+              </Badge>
+            </div>
+            <p className="text-sm text-ink-500 mt-0.5 flex items-center gap-1.5">
+              <Icon name="briefcase" className="w-3.5 h-3.5 shrink-0" />
+              {w.distributor?.name || '—'}
+            </p>
+            {w.phone && (
+              <p className="text-xs text-ink-400 mt-1 flex items-center gap-1.5">
+                <Icon name="phone" className="w-3.5 h-3.5 shrink-0" />
+                {w.phone}
+              </p>
+            )}
+          </div>
+        </div>
+
+        <PaymentProgress paid={w.totalPaid} unpaid={w.unpaidBalance} />
+
+        <div className="grid grid-cols-2 gap-2">
+          <div className="rounded-xl bg-gradient-to-br from-emerald-50 to-white border border-emerald-100/80 p-3">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-600">Paid</p>
+            <p className="text-lg font-bold text-emerald-800 tabular-nums mt-0.5">{formatMoney(w.totalPaid)}</p>
+          </div>
+          <div className="rounded-xl bg-gradient-to-br from-amber-50 to-white border border-amber-100/80 p-3">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-amber-600">Due</p>
+            <p className="text-lg font-bold text-amber-800 tabular-nums mt-0.5">{formatMoney(w.unpaidBalance)}</p>
+          </div>
+        </div>
+
+        <div className="rounded-xl bg-ink-50/80 border border-ink-100 p-3">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-ink-500">This month</p>
+            {attTotal > 0 && (
+              <span className="text-[10px] font-semibold text-ink-400">{attTotal} days marked</span>
+            )}
+          </div>
+          <AttendanceMiniBar monthAttendance={w.monthAttendance} />
+        </div>
+
+        <div className="flex flex-wrap gap-2 text-xs">
+          <span className="chip bg-primary-50 text-primary-700 border border-primary-100">
+            ₹{w.dailyRate}/day
+          </span>
+          <span className="chip bg-ink-50 text-ink-600 border border-ink-100">
+            Every {w.payoutIntervalDays}d
+          </span>
+        </div>
+
+        <div className="flex gap-2 mt-auto pt-1">
+          <Link
+            to={`/workers/${w.id}`}
+            className="btn-primary flex-1 text-sm text-center justify-center inline-flex items-center gap-1.5"
+          >
+            <Icon name="list" className="w-4 h-4" />
+            History
+          </Link>
+          <button type="button" className="btn-secondary flex-1 text-sm" onClick={() => onEdit(w)}>
+            Edit
+          </button>
+        </div>
+
+        {w.status === 'ACTIVE' ? (
+          <button
+            type="button"
+            className="text-xs text-rose-600 font-semibold hover:underline text-center"
+            onClick={() => onDeactivate(w)}
+          >
+            Deactivate worker
+          </button>
+        ) : (
+          <button
+            type="button"
+            className="text-xs text-emerald-600 font-semibold hover:underline text-center"
+            onClick={() => onReactivate(w)}
+          >
+            Reactivate worker
+          </button>
+        )}
+      </div>
+    </article>
+  );
+}
+
 export default function Workers() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [workers, setWorkers] = useState([]);
   const [distributors, setDistributors] = useState([]);
   const [form, setForm] = useState(emptyForm);
@@ -94,6 +229,13 @@ export default function Workers() {
     setLoading(true);
     load();
   }, [statusFilter]);
+
+  useEffect(() => {
+    if (searchParams.get('add') === '1') {
+      setShowForm(true);
+      setSearchParams({}, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
 
   const filteredWorkers = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -209,6 +351,41 @@ export default function Workers() {
       {message && <Alert type="success">{message}</Alert>}
       {error && <Alert type="error">{error}</Alert>}
 
+      {distributors.length === 0 && (
+        <Alert type="warning">
+          Add a <Link to="/distributors?add=1" className="font-semibold underline">project / site</Link> first,
+          then you can assign workers to it.
+        </Alert>
+      )}
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <Link
+          to="/workers?add=1"
+          className="card-elevated flex items-center gap-4 p-4 hover:border-primary-200 transition group"
+          onClick={(e) => {
+            e.preventDefault();
+            setShowForm(true);
+          }}
+        >
+          <div className="w-12 h-12 rounded-xl bg-primary-100 flex items-center justify-center group-hover:bg-primary-200 transition">
+            <Icon name="workers" className="w-6 h-6 text-primary-700" />
+          </div>
+          <div>
+            <p className="font-bold text-ink-900">Add Worker</p>
+            <p className="text-xs text-ink-500">Register employee with daily rate & pay cycle</p>
+          </div>
+        </Link>
+        <Link to="/distributors?add=1" className="card-elevated flex items-center gap-4 p-4 hover:border-primary-200 transition group">
+          <div className="w-12 h-12 rounded-xl bg-emerald-100 flex items-center justify-center group-hover:bg-emerald-200 transition">
+            <Icon name="briefcase" className="w-6 h-6 text-emerald-700" />
+          </div>
+          <div>
+            <p className="font-bold text-ink-900">Add Project / Site</p>
+            <p className="text-xs text-ink-500">Job site where workers are assigned</p>
+          </div>
+        </Link>
+      </div>
+
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <StatCard
           label="Active Workers"
@@ -250,12 +427,15 @@ export default function Workers() {
             </button>
           ))}
         </div>
-        <input
-          className="input sm:max-w-xs"
-          placeholder="Search name, distributor, phone..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
+        <div className="relative sm:max-w-xs w-full">
+          <Icon name="workers" className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-400 pointer-events-none" />
+          <input
+            className="input pl-10 w-full"
+            placeholder="Search name, distributor, phone..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
       </div>
 
       {showForm && (
@@ -288,13 +468,18 @@ export default function Workers() {
               <input type="date" className="input" value={form.payCycleAnchor} onChange={(e) => setForm({ ...form, payCycleAnchor: e.target.value })} required />
             </div>
             <div>
-              <label className="label">Distributor</label>
+              <label className="label">Project / Site</label>
               <select className="input" value={form.distributorId} onChange={(e) => setForm({ ...form, distributorId: e.target.value })} required>
-                <option value="">Select distributor</option>
+                <option value="">Select project / site</option>
                 {distributors.map((d) => (
                   <option key={d.id} value={d.id}>{d.name}</option>
                 ))}
               </select>
+              {!distributors.length && (
+                <p className="text-xs text-amber-700 mt-1">
+                  <Link to="/distributors?add=1" className="underline font-semibold">Create a project</Link> first
+                </p>
+              )}
             </div>
             {editingId && (
               <div>
@@ -315,70 +500,15 @@ export default function Workers() {
       {filteredWorkers.length === 0 ? (
         <EmptyState title="No workers found" description="Add a worker or adjust your filters." />
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
           {filteredWorkers.map((w) => (
-            <div
+            <WorkerCard
               key={w.id}
-              className={`card-elevated flex flex-col gap-4 ${w.status === 'INACTIVE' ? 'opacity-75' : ''}`}
-            >
-              <div className="flex items-start gap-3">
-                <Avatar name={w.name} size="md" />
-                <div className="flex-1 min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Link to={`/workers/${w.id}`} className="font-bold text-lg text-ink-900 hover:text-primary-700 truncate">
-                      {w.name}
-                    </Link>
-                    <Badge tone={w.status === 'ACTIVE' ? 'success' : 'neutral'}>
-                      {w.status === 'ACTIVE' ? 'Active' : 'Inactive'}
-                    </Badge>
-                  </div>
-                  <p className="text-sm text-ink-500 mt-0.5">{w.distributor?.name || '—'}</p>
-                  {w.phone && <p className="text-xs text-ink-400 mt-0.5">{w.phone}</p>}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3 text-sm">
-                <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-100">
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-700">Paid</p>
-                  <p className="font-bold text-emerald-800 tabular-nums mt-1">{formatMoney(w.totalPaid)}</p>
-                </div>
-                <div className="p-3 rounded-xl bg-amber-50 border border-amber-100">
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-700">Remaining</p>
-                  <p className="font-bold text-amber-800 tabular-nums mt-1">{formatMoney(w.unpaidBalance)}</p>
-                </div>
-              </div>
-
-              <div>
-                <p className="text-xs font-semibold text-ink-500 uppercase tracking-wide mb-2">This Month</p>
-                <AttendanceMiniBar monthAttendance={w.monthAttendance} />
-              </div>
-
-              <div className="pt-3 border-t border-ink-100 grid grid-cols-2 gap-2 text-xs text-ink-500">
-                <span>₹{w.dailyRate}/day</span>
-                <span className="text-right">Pay every {w.payoutIntervalDays}d</span>
-                <span className="col-span-2 text-ink-400">
-                  Period {w.currentPeriod?.start} → {w.currentPeriod?.end}
-                </span>
-              </div>
-
-              <div className="flex gap-2 mt-auto">
-                <Link to={`/workers/${w.id}`} className="btn-primary flex-1 text-sm text-center">
-                  View History
-                </Link>
-                <button type="button" className="btn-secondary flex-1 text-sm" onClick={() => startEdit(w)}>
-                  Edit
-                </button>
-              </div>
-              {w.status === 'ACTIVE' ? (
-                <button type="button" className="text-xs text-rose-600 font-semibold hover:underline" onClick={() => deactivate(w)}>
-                  Deactivate worker
-                </button>
-              ) : (
-                <button type="button" className="text-xs text-emerald-600 font-semibold hover:underline" onClick={() => reactivate(w)}>
-                  Reactivate worker
-                </button>
-              )}
-            </div>
+              worker={w}
+              onEdit={startEdit}
+              onDeactivate={deactivate}
+              onReactivate={reactivate}
+            />
           ))}
         </div>
       )}
