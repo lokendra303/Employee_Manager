@@ -7,6 +7,7 @@ import { authenticate, requireRole, requireTenantUser } from '../middleware/auth
 import { formatDateOnly, toDateOnly } from '../services/attendanceRules.js';
 import { getDistributorBalance } from '../services/payCycle.js';
 import { organizationFilter } from '../services/tenant.js';
+import { getFinancialOverview } from '../services/financialOverview.js';
 import { getDistributorForUser } from '../services/access.js';
 
 const router = Router();
@@ -379,6 +380,20 @@ router.post('/users', requireRole('ADMIN'), requireTenantUser, async (req, res) 
     if (err.code === 'P2002') {
       return error(res, 'DUPLICATE', 'Email already exists');
     }
+    return error(res, 'SERVER_ERROR', err.message, 500);
+  }
+});
+
+router.get('/financial-overview', requireRole('ADMIN'), requireTenantUser, async (req, res) => {
+  try {
+    const fromDate = req.query.from
+      ? toDateOnly(req.query.from)
+      : toDateOnly(new Date(new Date().setDate(1)));
+    const toDate = req.query.to ? toDateOnly(req.query.to) : toDateOnly(new Date());
+
+    const overview = await getFinancialOverview(req.user.organizationId, fromDate, toDate);
+    return success(res, overview);
+  } catch (err) {
     return error(res, 'SERVER_ERROR', err.message, 500);
   }
 });

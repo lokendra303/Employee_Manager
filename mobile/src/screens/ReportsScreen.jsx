@@ -19,6 +19,36 @@ function monthRange(offset = 0) {
   return { from, to };
 }
 
+function LedgerRow({ item }) {
+  const isOut = item.category === 'WORKER_PAYMENT';
+  const categoryLabels = {
+    FUND_RECEIVED: 'Fund received',
+    FUND_SENT: 'Fund sent',
+    FUND_APPROVED: 'Approved',
+    WORKER_PAYMENT: 'Worker pay',
+    WALLET_CREDIT: 'Wallet credit',
+  };
+  return (
+    <Card style={styles.ledgerCard} elevated>
+      <View style={styles.workerHeader}>
+        <Badge
+          label={categoryLabels[item.category] || item.category}
+          tone={isOut ? 'warning' : 'success'}
+        />
+        <Text style={[styles.ledgerAmount, isOut && { color: colors.danger }]}>
+          {isOut ? '−' : '+'}
+          {formatMoney(item.amount)}
+        </Text>
+      </View>
+      <Text style={styles.ledgerTitle}>{item.label}</Text>
+      <Text style={styles.ledgerMeta} numberOfLines={2}>
+        {[item.party, item.project, item.paidBy ? `by ${item.paidBy}` : null].filter(Boolean).join(' · ')}
+      </Text>
+      <Text style={styles.ledgerDate}>{new Date(item.date).toLocaleDateString()}</Text>
+    </Card>
+  );
+}
+
 function WorkerReportCard({ row }) {
   return (
     <Card style={styles.workerCard} elevated>
@@ -36,11 +66,11 @@ function WorkerReportCard({ row }) {
           <Text style={[styles.miniValue, { color: colors.halfDay }]}>{row.halfDays}</Text>
         </View>
         <View style={[styles.miniStat, styles.paidBox]}>
-          <Text style={styles.miniLabel}>Paid</Text>
+          <Text style={styles.miniLabel}>Accrual paid</Text>
           <Text style={[styles.miniValue, { color: colors.success }]}>{formatMoney(row.totalPaid)}</Text>
         </View>
         <View style={[styles.miniStat, styles.pendingBox]}>
-          <Text style={styles.miniLabel}>Pending</Text>
+          <Text style={styles.miniLabel}>Accrual pending</Text>
           <Text style={[styles.miniValue, { color: colors.warning }]}>{formatMoney(row.totalPending)}</Text>
         </View>
       </View>
@@ -78,10 +108,11 @@ function ProjectBalanceCard({ project }) {
 export default function ReportsScreen({ navigation }) {
   const { user } = useAuth();
   const isAdmin = user?.role === 'ADMIN';
-  const [tab, setTab] = useState('workers');
+  const [tab, setTab] = useState(isAdmin ? 'money' : 'workers');
   const [range, setRange] = useState(() => monthRange(0));
   const [daysReport, setDaysReport] = useState(null);
   const [reconciliation, setReconciliation] = useState([]);
+  const [financial, setFinancial] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -92,10 +123,14 @@ export default function ReportsScreen({ navigation }) {
       const requests = [api.get(`/reports/days-worked?from=${range.from}&to=${range.to}`)];
       if (isAdmin) {
         requests.push(api.get('/reports/distributor-reconciliation').catch(() => ({ data: [] })));
+        requests.push(
+          api.get(`/reports/financial-overview?from=${range.from}&to=${range.to}`).catch(() => ({ data: null }))
+        );
       }
       const results = await Promise.all(requests);
       setDaysReport(results[0].data);
       setReconciliation(isAdmin ? results[1]?.data || [] : []);
+      setFinancial(isAdmin ? results[2]?.data || null : null);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -127,7 +162,7 @@ export default function ReportsScreen({ navigation }) {
   return (
     <ScreenLayout
       title="Reports"
-      subtitle="Days worked, salary summary & project balances"
+      subtitle="Funds sent, worker payments & attendance accruals"
       headerDark
       showNotifications
       onNotificationsPress={() => navigation.navigate('Notifications')}
@@ -159,15 +194,50 @@ export default function ReportsScreen({ navigation }) {
         </View>
       </View>
 
-      <View style={styles.stats}>
-        <StatCard label="Workers" value={String(totals.workers)} icon="people-outline" tone="brand" />
-        <StatCard label="Eff. days" value={String(totals.effective.toFixed(1))} icon="calendar-outline" tone="default" />
-        <StatCard label="Paid" value={formatMoney(totals.paid)} icon="checkmark-circle-outline" tone="success" />
-        <StatCard label="Pending" value={formatMoney(totals.pending)} icon="alert-circle-outline" tone="warning" />
-      </View>
+      {isAdmin && tab === 'money' && financial ? (
+        <View style={styles.stats}>
+          <StatCard
+            label="Funds to staff"
+            value={formatMoney(financial.summary.fundsReleasedToStaff)}
+            icon="wallet-outline"
+            tone="brand"
+          />
+          <StatCard
+            label="Paid to workers"
+            value={formatMoney(financial.summary.workerPayments.total)}
+            icon="cash-outline"
+            tone="success"
+          />
+          <StatCard
+            label="Org wallet"
+            value={formatMoney(financial.summary.workerPayments.fromOrgWallet)}
+            icon="card-outline"
+            tone="default"
+          />
+          <StatCard
+            label="Personal adv."
+            value={formatMoney(financial.summary.workerPayments.personalAdvance)}
+            icon="alert-circle-outline"
+            tone="warning"
+          />
+        </View>
+      ) : (
+        <View style={styles.stats}>
+          <StatCard label="Workers" value={String(totals.workers)} icon="people-outline" tone="brand" />
+          <StatCard label="Eff. days" value={String(totals.effective.toFixed(1))} icon="calendar-outline" tone="default" />
+          <StatCard label="Accrual paid" value={formatMoney(totals.paid)} icon="checkmark-circle-outline" tone="success" />
+          <StatCard label="Accrual pending" value={formatMoney(totals.pending)} icon="alert-circle-outline" tone="warning" />
+        </View>
+      )}
 
       {isAdmin ? (
         <View style={styles.tabs}>
+          <Pressable
+            style={[styles.tab, tab === 'money' && styles.tabActive]}
+            onPress={() => setTab('money')}
+          >
+            <Text style={[styles.tabText, tab === 'money' && styles.tabTextActive]}>Money</Text>
+          </Pressable>
           <Pressable
             style={[styles.tab, tab === 'workers' && styles.tabActive]}
             onPress={() => setTab('workers')}
@@ -183,9 +253,18 @@ export default function ReportsScreen({ navigation }) {
         </View>
       ) : null}
 
-      {tab === 'workers' || !isAdmin ? (
+      {isAdmin && tab === 'money' ? (
         <>
-          <SectionTitle title="Days worked & salary" />
+          <SectionTitle title="Activity ledger" />
+          {!financial?.ledger?.length ? (
+            <Text style={styles.empty}>No financial activity in this period</Text>
+          ) : (
+            financial.ledger.map((item) => <LedgerRow key={item.id} item={item} />)
+          )}
+        </>
+      ) : tab === 'workers' || !isAdmin ? (
+        <>
+          <SectionTitle title="Days worked & accruals" />
           {!rows.length ? (
             <Text style={styles.empty}>No data for this period</Text>
           ) : (
@@ -259,4 +338,9 @@ const styles = StyleSheet.create({
   projectBalanceLabel: { fontSize: 14, fontWeight: '700', color: colors.text },
   projectBalanceValue: { fontSize: 16, fontWeight: '800', color: colors.primary },
   empty: { textAlign: 'center', color: colors.textMuted, paddingVertical: 32 },
+  ledgerCard: { marginBottom: spacing.sm, gap: 6 },
+  ledgerAmount: { fontSize: 16, fontWeight: '800', color: colors.success },
+  ledgerTitle: { fontSize: 14, fontWeight: '700', color: colors.text },
+  ledgerMeta: { fontSize: 12, color: colors.textMuted },
+  ledgerDate: { fontSize: 11, color: colors.textMuted },
 });
