@@ -5,7 +5,11 @@ import { colors } from '../theme';
 export default function ApiSettingsScreen({ navigation }) {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }} edges={['top']}>
-      <ApiServerPicker onSaved={() => navigation.goBack()} />
+      <ApiServerPicker
+        onSaved={() => navigation.goBack()}
+        saveToServer
+        testBeforeSave
+      />
     </SafeAreaView>
   );
 }

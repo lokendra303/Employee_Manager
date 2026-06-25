@@ -112,6 +112,76 @@ export async function debitWalletPersonalAdvance(
   });
 }
 
+/**
+ * Debits wallet for a salary payment. Uses available org wallet balance first;
+ * any shortfall is recorded as personal advance (negative balance / reimbursement due).
+ */
+export async function debitWalletForDisbursement(
+  tx,
+  { walletId, amount, workerId, paymentMethod, reference, notes, createdById, forcePersonalAdvance = false }
+) {
+  if (forcePersonalAdvance) {
+    await debitWalletPersonalAdvance(tx, {
+      walletId,
+      amount,
+      workerId,
+      paymentMethod,
+      reference,
+      notes,
+      createdById,
+    });
+    return { usedPersonalAdvance: true, personalAdvanceAmount: amount, walletAmount: 0 };
+  }
+
+  const balance = await getWalletBalanceInTx(tx, walletId);
+
+  if (amount <= balance) {
+    await debitWallet(tx, {
+      walletId,
+      amount,
+      workerId,
+      paymentMethod,
+      reference,
+      notes,
+      createdById,
+    });
+    return { usedPersonalAdvance: false, personalAdvanceAmount: 0, walletAmount: amount };
+  }
+
+  const walletAmount = Math.max(0, balance);
+  const personalAdvanceAmount = amount - walletAmount;
+
+  if (walletAmount > 0) {
+    await debitWallet(tx, {
+      walletId,
+      amount: walletAmount,
+      workerId,
+      paymentMethod,
+      reference,
+      notes,
+      createdById,
+    });
+  }
+
+  if (personalAdvanceAmount > 0) {
+    await debitWalletPersonalAdvance(tx, {
+      walletId,
+      amount: personalAdvanceAmount,
+      workerId,
+      paymentMethod,
+      reference,
+      notes,
+      createdById,
+    });
+  }
+
+  return {
+    usedPersonalAdvance: personalAdvanceAmount > 0,
+    personalAdvanceAmount,
+    walletAmount,
+  };
+}
+
 async function getWalletBalanceInTx(tx, walletId) {
   const wallet = await tx.wallet.findUnique({ where: { id: walletId } });
   if (!wallet) throw new Error('Wallet not found');

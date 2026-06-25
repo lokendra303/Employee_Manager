@@ -1,10 +1,12 @@
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '../context/AuthContext';
 import { getMoreLinks } from '../navigation/roleTabs';
 import AppHeader, { ListRow } from '../components/AppHeader';
 import ScreenLayout from '../components/ScreenLayout';
-import { Card, SectionTitle } from '../components/ui';
-import { colors, spacing, typography } from '../theme';
+import { FadeInUp } from '../components/motion';
+import { SectionTitle } from '../components/ui';
+import { colors, gradients, radius, spacing, typography } from '../theme';
 
 const LINK_ICONS = {
   FundRequests: 'cash-outline',
@@ -46,13 +48,15 @@ export default function MoreScreen({ navigation }) {
         contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator={false}
       >
-        <Card style={styles.profileCard} elevated>
-          <Text style={styles.profileName}>{user?.name}</Text>
-          <Text style={styles.profileMeta}>{user?.organizationName}</Text>
-          <View style={styles.rolePill}>
-            <Text style={styles.roleText}>{user?.role?.replace(/_/g, ' ')}</Text>
-          </View>
-        </Card>
+        <FadeInUp delay={100}>
+          <LinearGradient colors={gradients.primary} style={styles.profileCard}>
+            <Text style={styles.profileName}>{user?.name}</Text>
+            <Text style={styles.profileMeta}>{user?.organizationName}</Text>
+            <View style={styles.rolePill}>
+              <Text style={styles.roleText}>{user?.role?.replace(/_/g, ' ')}</Text>
+            </View>
+          </LinearGradient>
+        </FadeInUp>
 
         <SectionTitle title="Menu" />
         <View style={styles.list}>
@@ -62,20 +66,15 @@ export default function MoreScreen({ navigation }) {
             sublabel="Fund requests & alerts"
             onPress={openNotifications}
           />
-          {links.map((link) => (
+          {links.map((link, i) => (
             <ListRow
               key={link.screen}
               icon={LINK_ICONS[link.screen] || 'ellipse-outline'}
               label={link.title}
               onPress={() => goTo(link.screen)}
+              delay={i * 60}
             />
           ))}
-          <ListRow
-            icon="server-outline"
-            label="API URL"
-            sublabel="Backend server address"
-            onPress={() => navigation.navigate('ApiSettings')}
-          />
         </View>
 
         <ListRow
@@ -96,12 +95,17 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.xl,
     gap: spacing.md,
   },
-  profileCard: { alignItems: 'flex-start', gap: 4 },
-  profileName: { ...typography.title, fontSize: 20 },
-  profileMeta: { ...typography.subtitle },
+  profileCard: {
+    alignItems: 'flex-start',
+    gap: 4,
+    padding: spacing.lg,
+    borderRadius: radius.lg,
+  },
+  profileName: { ...typography.title, fontSize: 20, color: '#fff' },
+  profileMeta: { ...typography.subtitle, color: 'rgba(255,255,255,0.8)' },
   rolePill: {
     marginTop: spacing.sm,
-    backgroundColor: colors.primarySoft,
+    backgroundColor: 'rgba(255,255,255,0.2)',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 999,
@@ -109,7 +113,7 @@ const styles = StyleSheet.create({
   roleText: {
     fontSize: 11,
     fontWeight: '700',
-    color: colors.primary,
+    color: '#fff',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },

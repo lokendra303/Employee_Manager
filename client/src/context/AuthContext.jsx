@@ -1,14 +1,47 @@
-import { createContext, useContext, useState, useEffect } from 'react';
+import { createContext, useContext, useEffect, useState } from 'react';
 import api from '../api/client';
 
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(() => {
-    const stored = localStorage.getItem('user');
-    return stored ? JSON.parse(stored) : null;
-  });
+  const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [bootstrapping, setBootstrapping] = useState(true);
+
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    const stored = localStorage.getItem('user');
+    if (!token || !stored) {
+      setBootstrapping(false);
+      return;
+    }
+
+    let parsed;
+    try {
+      parsed = JSON.parse(stored);
+      setUser(parsed);
+    } catch {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      setBootstrapping(false);
+      return;
+    }
+
+    api.get('/auth/me')
+      .then((res) => {
+        const fresh = res.data?.id ? res.data : res.data?.user;
+        if (fresh) {
+          setUser(fresh);
+          localStorage.setItem('user', JSON.stringify(fresh));
+        }
+      })
+      .catch(() => {
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        setUser(null);
+      })
+      .finally(() => setBootstrapping(false));
+  }, []);
 
   const login = async (email, password) => {
     setLoading(true);
@@ -38,7 +71,7 @@ export function AuthProvider({ children }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, loading, updateUser }}>
+    <AuthContext.Provider value={{ user, login, logout, loading, bootstrapping, updateUser }}>
       {children}
     </AuthContext.Provider>
   );

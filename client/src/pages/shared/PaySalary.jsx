@@ -92,12 +92,6 @@ export default function PaySalary({ title = 'Pay Salary' }) {
       setError('Online/bank payment requires a transaction reference or note');
       return;
     }
-    if (!form.paidFromPersonal && walletBalance != null && amount > walletBalance) {
-      setError(
-        `Insufficient wallet balance. Available: ₹${walletBalance}. Enable "Paid from personal" if you already paid from your own money.`
-      );
-      return;
-    }
 
     setError('');
     setMessage('');
@@ -115,18 +109,26 @@ export default function PaySalary({ title = 'Pay Salary' }) {
       const partial = res.data.isPartial;
       const remaining = res.data.remainingBalance;
       const personal = res.data.paidFromPersonal;
+      const advanceAmount = res.data.personalAdvanceAmount ?? 0;
       setMessage(
         personal
           ? partial
-            ? `Personal advance of ₹${amount.toLocaleString()} recorded. Remaining unpaid: ₹${remaining?.toLocaleString()}. Request reimbursement via Fund Request.`
-            : `Personal advance of ₹${amount.toLocaleString()} recorded. Request reimbursement via Fund Request.`
+            ? advanceAmount > 0 && res.data.walletAmountUsed > 0
+              ? `₹${res.data.walletAmountUsed.toLocaleString()} from wallet, ₹${advanceAmount.toLocaleString()} personal advance recorded. Remaining unpaid: ₹${remaining?.toLocaleString()}.`
+              : `Personal advance of ₹${(advanceAmount || amount).toLocaleString()} recorded. Remaining unpaid: ₹${remaining?.toLocaleString()}. Request reimbursement via Fund Request.`
+            : advanceAmount > 0 && res.data.walletAmountUsed > 0
+              ? `₹${res.data.walletAmountUsed.toLocaleString()} from wallet, ₹${advanceAmount.toLocaleString()} personal advance recorded.`
+              : `Personal advance of ₹${(advanceAmount || amount).toLocaleString()} recorded. Request reimbursement via Fund Request.`
           : partial
             ? `Partial payment of ₹${amount.toLocaleString()} recorded. Remaining unpaid: ₹${remaining?.toLocaleString()}`
             : `Full payment of ₹${amount.toLocaleString()} recorded successfully`
       );
       if (walletBalance != null) {
-        setWalletBalance((b) => b - amount);
-        if (personal) setPersonalAdvanceDue((d) => d + amount);
+        const walletRes = await api.get('/wallet').catch(() => null);
+        if (walletRes?.data) {
+          setWalletBalance(walletRes.data.balance ?? 0);
+          setPersonalAdvanceDue(walletRes.data.personalAdvanceDue ?? 0);
+        }
       }
       const worker = workers.find((w) => w.id === selectedWorker);
       if (worker) loadAccruals(worker);
@@ -169,15 +171,23 @@ export default function PaySalary({ title = 'Pay Salary' }) {
             variant={walletBalance < 0 ? 'danger' : 'brand'}
             icon={<Icon name="wallet" className="w-5 h-5" />}
           />
-          {personalAdvanceDue > 0 && (
+          {personalAdvanceDue > 0 ? (
             <StatCard
-              label="Personal Advance"
+              label="Personal Advance Due"
               value={`₹${personalAdvanceDue.toLocaleString()}`}
-              sub="Pending reimbursement"
+              sub="Reimbursed first when admin releases funds"
               variant="warning"
               icon={<Icon name="alert" className="w-5 h-5" />}
             />
-          )}
+          ) : walletBalance < 0 ? (
+            <StatCard
+              label="Personal Advance Due"
+              value={`₹${Math.abs(walletBalance).toLocaleString()}`}
+              sub="Wallet is negative — request fund reimbursement"
+              variant="warning"
+              icon={<Icon name="alert" className="w-5 h-5" />}
+            />
+          ) : null}
         </div>
       )}
 
@@ -309,7 +319,9 @@ export default function PaySalary({ title = 'Pay Salary' }) {
                     <div>
                       <p className="text-sm font-semibold text-ink-900">Paid from my personal money</p>
                       <p className="text-xs text-ink-500 mt-1 leading-relaxed">
-                        Already paid the worker from your pocket? Record it here and request reimbursement later — no wallet balance needed.
+                        Already paid the worker from your pocket? Record it here. If wallet balance is
+                        insufficient, the shortfall is tracked as personal advance (wallet goes negative)
+                        until admin releases funds.
                       </p>
                     </div>
                   </label>

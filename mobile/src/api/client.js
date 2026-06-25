@@ -89,6 +89,18 @@ api.interceptors.response.use(
   }
 );
 
+export async function fetchPublicConfig(bootstrapUrl) {
+  const base = bootstrapUrl || currentBaseUrl;
+  if (!base) return null;
+  const client = axios.create({ baseURL: base, timeout: 10000 });
+  try {
+    const res = await client.get('/public/config');
+    return res.data?.data?.apiBaseUrl?.trim() || null;
+  } catch {
+    return null;
+  }
+}
+
 export async function testApiConnection(baseUrl) {
   const client = axios.create({ baseURL: baseUrl, timeout: 10000 });
   try {

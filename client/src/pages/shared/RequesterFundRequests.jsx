@@ -108,7 +108,7 @@ export default function RequesterFundRequests() {
       <PageHeader
         badge="Finance"
         title="Fund Request"
-        subtitle="Request organization funds for worker salaries or personal advance reimbursement."
+        subtitle="Request organization funds. Payment breakdown is for reference — admin decides the approved amount."
         action={
           <Link to="/wallet" className="btn-secondary text-sm">
             <Icon name="wallet" className="w-4 h-4" />
@@ -144,6 +144,7 @@ export default function RequesterFundRequests() {
               variant="warning"
               icon={<Icon name="alert" className="w-5 h-5" />}
             />
+          {calculation.fundNeeded > 0 && (
             <StatCard
               label="Fund Needed"
               value={`₹${calculation.fundNeeded?.toLocaleString()}`}
@@ -151,6 +152,7 @@ export default function RequesterFundRequests() {
               variant="default"
               icon={<Icon name="spark" className="w-5 h-5" />}
             />
+          )}
           </div>
 
           {calculation.workers?.length > 0 && (
@@ -170,7 +172,7 @@ export default function RequesterFundRequests() {
             </div>
           )}
 
-          {calculation.fundNeeded > 0 && !hasActive && (
+          {!hasActive && (
             <form onSubmit={submitRequest} className="card space-y-5">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-primary-100 flex items-center justify-center">
@@ -231,9 +233,15 @@ export default function RequesterFundRequests() {
                       {' · '}
                       Due <span className="font-semibold">₹{r.calculatedAmount?.toLocaleString()}</span>
                     </p>
-                    {r.approvedAmount && (
+                    {r.approvedAmount != null && (
                       <p className="text-sm text-primary-700 font-medium">
                         Approved: ₹{r.approvedAmount?.toLocaleString()}
+                        {r.approvedAmount !== r.requestedAmount && (
+                          <span className="text-ink-500 font-normal">
+                            {' '}
+                            (you requested ₹{r.requestedAmount?.toLocaleString()})
+                          </span>
+                        )}
                       </p>
                     )}
                     {r.sentPaymentMethod && r.status !== 'PENDING' && r.status !== 'APPROVED' && (
@@ -264,10 +272,10 @@ export default function RequesterFundRequests() {
                   </div>
                 )}
 
-                {r.status === 'APPROVED' && (
+                {r.status === 'APPROVED' && r.approvedAmount != null && (
                   <p className="text-sm text-primary-600 pt-3 border-t border-ink-100 flex items-center gap-1.5">
                     <Icon name="spark" className="w-4 h-4" />
-                    Approved — waiting for admin to mark funds as sent
+                    Approved for ₹{r.approvedAmount?.toLocaleString()} — waiting for admin to mark funds as sent
                   </p>
                 )}
               </div>

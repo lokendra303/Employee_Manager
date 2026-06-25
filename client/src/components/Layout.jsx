@@ -69,9 +69,12 @@ export default function Layout({ children }) {
   const canEditProfile = user?.role === 'ADMIN' || user?.role === 'SYSTEM_ADMIN';
 
   const handleLogout = () => {
+    const loginPath = user?.role === 'SYSTEM_ADMIN' ? '/system-login' : '/login';
     logout();
-    navigate('/login');
+    navigate(loginPath);
   };
+
+  const showNotifications = user?.role !== 'SYSTEM_ADMIN';
 
   const roleLabel = user?.role?.replace(/_/g, ' ');
 
@@ -80,7 +83,7 @@ export default function Layout({ children }) {
       <header className="md:hidden bg-ink-900 px-4 py-3 flex items-center justify-between sticky top-0 z-20 border-b border-white/5">
         <Logo compact />
         <div className="flex items-center gap-1">
-          <NotificationBell />
+          {showNotifications ? <NotificationBell /> : null}
           <button onClick={handleLogout} className="text-xs font-semibold text-ink-300 hover:text-white px-3 py-1.5 rounded-lg hover:bg-white/5">
             Sign out
           </button>
@@ -112,13 +115,14 @@ export default function Layout({ children }) {
         </div>
 
         <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
-          {items.map((item) => (
+          {items.map((item, i) => (
             <NavLink
               key={item.to}
               to={item.to}
               end={item.to === '/'}
+              style={{ animationDelay: `${i * 40}ms` }}
               className={({ isActive }) =>
-                `flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 ${
+                `flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 animate-slide-in-right ${
                   isActive ? 'nav-link-active' : 'nav-link-idle'
                 }`
               }
@@ -130,10 +134,12 @@ export default function Layout({ children }) {
         </nav>
 
         <div className="p-4 border-t border-white/5 space-y-2">
-          <div className="flex items-center justify-between px-1">
-            <span className="text-xs text-ink-400 font-medium">Alerts</span>
-            <NotificationBell dropUp />
-          </div>
+          {showNotifications ? (
+            <div className="flex items-center justify-between px-1">
+              <span className="text-xs text-ink-400 font-medium">Alerts</span>
+              <NotificationBell dropUp />
+            </div>
+          ) : null}
           <button
             onClick={handleLogout}
             className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium text-ink-300 border border-white/10 hover:bg-white/5 hover:text-white transition"
@@ -143,7 +149,7 @@ export default function Layout({ children }) {
         </div>
       </aside>
 
-      <main className="flex-1 p-4 pb-24 md:p-8 md:pb-8 max-w-6xl w-full mx-auto">
+      <main className="flex-1 p-4 pb-24 md:p-8 md:pb-8 max-w-6xl w-full mx-auto animate-fade-in">
         {children}
       </main>
 

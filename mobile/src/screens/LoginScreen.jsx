@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
-import { Platform, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
 import { useApiConfig } from '../context/ApiConfigContext';
-import ApiServerPicker from '../components/ApiServerPicker';
+import AuthFormScroll from '../components/AuthFormScroll';
+import { FadeInUp, MeshBackground } from '../components/motion';
 import {
   Card,
   ErrorBanner,
@@ -14,7 +16,7 @@ import {
   PrimaryButton,
 } from '../components/ui';
 import { AUTH_LAST_EMAIL_KEY, AUTH_REMEMBER_KEY } from '../constants/authStorage';
-import { colors, radius, shadow, spacing, typography } from '../theme';
+import { colors, gradients, radius, shadow, spacing, typography } from '../theme';
 
 export default function LoginScreen({ navigation }) {
   const [email, setEmail] = useState('');
@@ -23,7 +25,7 @@ export default function LoginScreen({ navigation }) {
   const [rememberMe, setRememberMe] = useState(true);
   const [error, setError] = useState('');
   const { login, loading } = useAuth();
-  const { apiBaseUrl } = useApiConfig();
+  const { apiBaseUrl, configError, bootstrapping } = useApiConfig();
   const insets = useSafeAreaInsets();
   const scrollRef = useRef(null);
 
@@ -38,14 +40,10 @@ export default function LoginScreen({ navigation }) {
     })();
   }, []);
 
-  const scrollToPassword = () => {
-    requestAnimationFrame(() => scrollRef.current?.scrollToEnd({ animated: true }));
-  };
-
   const handleSubmit = async () => {
     setError('');
     if (!apiBaseUrl) {
-      setError('Set API URL first (tap the server bar below)');
+      setError(configError || 'Server not configured. Contact your system administrator.');
       return;
     }
     try {
@@ -58,32 +56,35 @@ export default function LoginScreen({ navigation }) {
   return (
     <View style={styles.root}>
       <StatusBar style="light" />
-      <View style={[styles.hero, { paddingTop: insets.top + spacing.lg }]}>
-        <View style={styles.logoRing}>
-          <View style={styles.logo}>
-            <Ionicons name="calendar" size={32} color="#fff" />
+      <LinearGradient colors={gradients.hero} style={[styles.hero, { paddingTop: insets.top + spacing.lg }]}>
+        <MeshBackground variant="dark" />
+        <FadeInUp delay={0}>
+          <View style={styles.logoRing}>
+            <LinearGradient colors={gradients.primary} style={styles.logo}>
+              <Ionicons name="calendar" size={34} color="#fff" />
+            </LinearGradient>
           </View>
-        </View>
-        <Text style={styles.appName}>Attendance Manager</Text>
-        <Text style={styles.tagline}>Workforce pay & attendance</Text>
-      </View>
+        </FadeInUp>
+        <FadeInUp delay={100}>
+          <Text style={styles.appName}>Attendance Manager</Text>
+          <Text style={styles.tagline}>Workforce pay & attendance</Text>
+        </FadeInUp>
+      </LinearGradient>
 
-      <ScrollView
-        ref={scrollRef}
-        style={styles.scroll}
-        contentContainerStyle={[
-          styles.scrollContent,
-          { paddingBottom: Math.max(insets.bottom, spacing.lg) + spacing.lg },
-        ]}
-        keyboardShouldPersistTaps="handled"
-        automaticallyAdjustKeyboardInsets
-        showsVerticalScrollIndicator={false}
-      >
+      <AuthFormScroll scrollRef={scrollRef} contentContainerStyle={styles.scrollContent}>
         <Card style={styles.formCard} elevated>
           <Text style={styles.formTitle}>Welcome back</Text>
           <Text style={styles.formSub}>Sign in to your account</Text>
 
-          <ApiServerPicker compact onSaved={() => navigation.navigate('ApiSettings')} />
+          {!bootstrapping && !apiBaseUrl ? (
+            <View style={styles.configWarn}>
+              <Ionicons name="cloud-offline-outline" size={20} color="#c2410c" />
+              <Text style={styles.configWarnText}>
+                {configError || 'Server URL not configured yet.'}
+              </Text>
+            </View>
+          ) : null}
+
           <ErrorBanner message={error} />
 
           <InputField
@@ -102,15 +103,10 @@ export default function LoginScreen({ navigation }) {
             onChangeText={setPassword}
             placeholder="Enter password"
             secureTextEntry={!showPassword}
-            onFocus={scrollToPassword}
             returnKeyType="done"
             onSubmitEditing={handleSubmit}
             rightElement={
-              <Pressable
-                onPress={() => setShowPassword((v) => !v)}
-                style={styles.eyeBtn}
-                hitSlop={8}
-              >
+              <Pressable onPress={() => setShowPassword((v) => !v)} style={styles.eyeBtn} hitSlop={8}>
                 <Ionicons
                   name={showPassword ? 'eye-off-outline' : 'eye-outline'}
                   size={22}
@@ -138,7 +134,7 @@ export default function LoginScreen({ navigation }) {
             icon="log-in-outline"
             onPress={handleSubmit}
             loading={loading}
-            disabled={!email || !password}
+            disabled={!email || !password || !apiBaseUrl}
           />
 
           <Pressable onPress={() => navigation.navigate('Register')} style={styles.registerLink}>
@@ -146,8 +142,13 @@ export default function LoginScreen({ navigation }) {
               New organization? <Text style={styles.registerCta}>Register</Text>
             </Text>
           </Pressable>
+
+          <Pressable onPress={() => navigation.navigate('SystemAdminLogin')} style={styles.adminLink}>
+            <Ionicons name="shield-checkmark-outline" size={16} color={colors.textMuted} />
+            <Text style={styles.adminLinkText}>System administrator sign in</Text>
+          </Pressable>
         </Card>
-      </ScrollView>
+      </AuthFormScroll>
     </View>
   );
 }
@@ -155,39 +156,49 @@ export default function LoginScreen({ navigation }) {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
   hero: {
-    backgroundColor: colors.header,
     alignItems: 'center',
-    paddingBottom: spacing.xl + 20,
-    borderBottomLeftRadius: 28,
-    borderBottomRightRadius: 28,
+    paddingBottom: spacing.xl + 24,
+    borderBottomLeftRadius: 32,
+    borderBottomRightRadius: 32,
+    overflow: 'hidden',
   },
   logoRing: {
-    padding: 4,
-    borderRadius: 24,
-    backgroundColor: 'rgba(255,255,255,0.15)',
+    padding: 3,
+    borderRadius: 26,
+    backgroundColor: 'rgba(255,255,255,0.12)',
     marginBottom: spacing.md,
   },
   logo: {
-    width: 64,
-    height: 64,
-    borderRadius: 20,
-    backgroundColor: colors.primary,
+    width: 68,
+    height: 68,
+    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
-    ...shadow('lg'),
+    ...shadow('glow'),
   },
-  appName: { fontSize: 26, fontWeight: '800', color: '#fff', letterSpacing: -0.5 },
-  tagline: { fontSize: 14, color: 'rgba(255,255,255,0.7)', marginTop: 6 },
-  scroll: { flex: 1, marginTop: -28 },
-  scrollContent: { paddingHorizontal: spacing.md },
+  appName: { fontSize: 28, fontWeight: '800', color: '#fff', letterSpacing: -0.6 },
+  tagline: { fontSize: 15, color: 'rgba(255,255,255,0.75)', marginTop: 8 },
+  scrollContent: { paddingHorizontal: spacing.md, marginTop: -32 },
   formCard: {
     padding: spacing.lg,
     gap: spacing.md,
     borderRadius: radius.xl,
+    backgroundColor: colors.glass,
     ...shadow('lg'),
   },
-  formTitle: { ...typography.title, fontSize: 20 },
+  formTitle: { ...typography.title, fontSize: 22 },
   formSub: { ...typography.subtitle, marginTop: -4 },
+  configWarn: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    backgroundColor: '#fff7ed',
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: '#fed7aa',
+    padding: spacing.md,
+  },
+  configWarnText: { flex: 1, fontSize: 13, color: '#c2410c', lineHeight: 18 },
   eyeBtn: { paddingHorizontal: spacing.md, paddingVertical: 12 },
   rememberRow: {
     flexDirection: 'row',
@@ -197,6 +208,8 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     padding: spacing.md,
     gap: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.primaryLight,
   },
   rememberText: { flex: 1 },
   rememberLabel: { fontSize: 14, fontWeight: '700', color: colors.text },
@@ -204,4 +217,12 @@ const styles = StyleSheet.create({
   registerLink: { alignItems: 'center', paddingTop: spacing.sm },
   registerText: { fontSize: 14, color: colors.textMuted },
   registerCta: { color: colors.primary, fontWeight: '700' },
+  adminLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingTop: spacing.xs,
+  },
+  adminLinkText: { fontSize: 13, color: colors.textMuted, fontWeight: '600' },
 });

@@ -4,6 +4,7 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   View,
@@ -28,6 +29,7 @@ const emptyForm = {
 };
 
 const emptyEditForm = { name: '', contactPhone: '', contactEmail: '' };
+const emptyLoginForm = { name: '', email: '', password: '', isActive: true };
 
 function formatMoney(value) {
   return `₹${(Number(value) || 0).toLocaleString()}`;
@@ -43,9 +45,11 @@ export default function DistributorsScreen() {
   const [form, setForm] = useState(emptyForm);
   const [showSupervisorPicker, setShowSupervisorPicker] = useState(false);
   const [creating, setCreating] = useState(false);
-  const [editingId, setEditingId] = useState(null);
+  const [editingItem, setEditingItem] = useState(null);
   const [editForm, setEditForm] = useState(emptyEditForm);
+  const [loginForm, setLoginForm] = useState(emptyLoginForm);
   const [savingEdit, setSavingEdit] = useState(false);
+  const [savingLogin, setSavingLogin] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -98,36 +102,99 @@ export default function DistributorsScreen() {
   };
 
   const openEdit = (d) => {
-    setEditingId(d.id);
+    setEditingItem(d);
     setEditForm({
       name: d.name || '',
       contactPhone: d.contactPhone || '',
       contactEmail: d.contactEmail || '',
     });
+    if (d.linkedUser?.role === 'DISTRIBUTOR') {
+      setLoginForm({
+        name: d.linkedUser.name || '',
+        email: d.linkedUser.email || '',
+        password: '',
+        isActive: d.linkedUser.isActive ?? true,
+      });
+    } else {
+      setLoginForm(emptyLoginForm);
+    }
     setError('');
     setMessage('');
   };
 
+  const closeEdit = () => {
+    setEditingItem(null);
+    setLoginForm(emptyLoginForm);
+  };
+
   const handleSaveEdit = async () => {
-    if (!editingId || !editForm.name.trim()) {
+    if (!editingItem?.id || !editForm.name.trim()) {
       setError('Name is required');
       return;
     }
     setSavingEdit(true);
     setError('');
     try {
-      await api.put(`/distributors/${editingId}`, {
+      await api.put(`/distributors/${editingItem.id}`, {
         name: editForm.name.trim(),
         contactPhone: editForm.contactPhone.trim() || undefined,
         contactEmail: editForm.contactEmail.trim() || '',
       });
       setMessage('Distributor updated');
-      setEditingId(null);
+      closeEdit();
       await load();
     } catch (err) {
       setError(err.message);
     } finally {
       setSavingEdit(false);
+    }
+  };
+
+  const handleSaveLogin = async () => {
+    if (!editingItem?.id) return;
+    const hasLogin = editingItem.linkedUser?.role === 'DISTRIBUTOR';
+    if (!hasLogin) {
+      if (!loginForm.name.trim() || !loginForm.email.trim() || !loginForm.password.trim()) {
+        setError('Name, login email, and password are required');
+        return;
+      }
+    } else if (!loginForm.name.trim() || !loginForm.email.trim()) {
+      setError('Name and login email are required');
+      return;
+    }
+    if (loginForm.password && loginForm.password.length < 6) {
+      setError('Password must be at least 6 characters');
+      return;
+    }
+
+    setSavingLogin(true);
+    setError('');
+    try {
+      if (hasLogin) {
+        const payload = {
+          name: loginForm.name.trim(),
+          email: loginForm.email.trim(),
+          isActive: loginForm.isActive,
+        };
+        if (loginForm.password.trim()) {
+          payload.password = loginForm.password.trim();
+        }
+        await api.put(`/distributors/${editingItem.id}/login-account`, payload);
+        setMessage('Distributor login updated');
+      } else {
+        await api.post(`/distributors/${editingItem.id}/login-account`, {
+          name: loginForm.name.trim(),
+          email: loginForm.email.trim(),
+          password: loginForm.password.trim(),
+        });
+        setMessage('Distributor login created');
+      }
+      closeEdit();
+      await load();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSavingLogin(false);
     }
   };
 
@@ -296,40 +363,107 @@ export default function DistributorsScreen() {
         )}
       </ScrollView>
 
-      <Modal visible={!!editingId} transparent animationType="slide">
+      <Modal visible={!!editingItem} transparent animationType="slide" onRequestClose={closeEdit}>
         <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
-            <Text style={styles.formTitle}>Edit Distributor</Text>
-            <Text style={styles.label}>Name</Text>
-            <TextInput
-              style={styles.input}
-              value={editForm.name}
-              onChangeText={(name) => setEditForm({ ...editForm, name })}
-            />
-            <Text style={styles.label}>Phone</Text>
-            <TextInput
-              style={styles.input}
-              value={editForm.contactPhone}
-              onChangeText={(contactPhone) => setEditForm({ ...editForm, contactPhone })}
-              keyboardType="phone-pad"
-            />
-            <Text style={styles.label}>Email</Text>
-            <TextInput
-              style={styles.input}
-              value={editForm.contactEmail}
-              onChangeText={(contactEmail) => setEditForm({ ...editForm, contactEmail })}
-              keyboardType="email-address"
-              autoCapitalize="none"
-            />
-            <View style={styles.modalActions}>
-              <Pressable style={styles.cancelBtn} onPress={() => setEditingId(null)}>
-                <Text style={styles.cancelBtnText}>Cancel</Text>
-              </Pressable>
-              <View style={styles.saveBtnWrap}>
-                <PrimaryButton title="Save" onPress={handleSaveEdit} loading={savingEdit} />
+          <Pressable style={StyleSheet.absoluteFill} onPress={closeEdit} />
+          <ScrollView
+            style={styles.modalCardWrap}
+            contentContainerStyle={styles.modalScroll}
+            keyboardShouldPersistTaps="handled"
+          >
+            <View style={styles.modalCard}>
+              <Text style={styles.formTitle}>Edit Distributor</Text>
+              <Text style={styles.label}>Name</Text>
+              <TextInput
+                style={styles.input}
+                value={editForm.name}
+                onChangeText={(name) => setEditForm({ ...editForm, name })}
+              />
+              <Text style={styles.label}>Phone</Text>
+              <TextInput
+                style={styles.input}
+                value={editForm.contactPhone}
+                onChangeText={(contactPhone) => setEditForm({ ...editForm, contactPhone })}
+                keyboardType="phone-pad"
+              />
+              <Text style={styles.label}>Contact Email</Text>
+              <TextInput
+                style={styles.input}
+                value={editForm.contactEmail}
+                onChangeText={(contactEmail) => setEditForm({ ...editForm, contactEmail })}
+                keyboardType="email-address"
+                autoCapitalize="none"
+              />
+
+              <Text style={styles.sectionTitle}>Login Account</Text>
+              {editingItem?.linkedUser?.role === 'SUPERVISOR' ? (
+                <Text style={styles.supervisorNote}>
+                  Uses supervisor login ({editingItem.linkedUser.email}). Edit on Supervisors screen.
+                </Text>
+              ) : (
+                <>
+                  <Text style={styles.label}>Display Name</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={loginForm.name}
+                    onChangeText={(name) => setLoginForm({ ...loginForm, name })}
+                    placeholder="Name in app"
+                  />
+                  <Text style={styles.label}>Login Email</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={loginForm.email}
+                    onChangeText={(email) => setLoginForm({ ...loginForm, email })}
+                    placeholder="distributor@company.com"
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                  />
+                  <Text style={styles.label}>
+                    {editingItem?.linkedUser?.role === 'DISTRIBUTOR'
+                      ? 'New Password (optional)'
+                      : 'Password'}
+                  </Text>
+                  <TextInput
+                    style={styles.input}
+                    value={loginForm.password}
+                    onChangeText={(password) => setLoginForm({ ...loginForm, password })}
+                    placeholder="Min 6 characters"
+                    secureTextEntry
+                  />
+                  {editingItem?.linkedUser?.role === 'DISTRIBUTOR' ? (
+                    <View style={styles.switchRow}>
+                      <View style={styles.switchText}>
+                        <Text style={styles.switchLabel}>Account active</Text>
+                      </View>
+                      <Switch
+                        value={loginForm.isActive}
+                        onValueChange={(isActive) => setLoginForm({ ...loginForm, isActive })}
+                        trackColor={{ false: colors.border, true: colors.primary }}
+                      />
+                    </View>
+                  ) : null}
+                  <PrimaryButton
+                    title={
+                      editingItem?.linkedUser?.role === 'DISTRIBUTOR'
+                        ? 'Save Login'
+                        : 'Create Login Account'
+                    }
+                    onPress={handleSaveLogin}
+                    loading={savingLogin}
+                  />
+                </>
+              )}
+
+              <View style={styles.modalActions}>
+                <Pressable style={styles.cancelBtn} onPress={closeEdit}>
+                  <Text style={styles.cancelBtnText}>Close</Text>
+                </Pressable>
+                <View style={styles.saveBtnWrap}>
+                  <PrimaryButton title="Save Profile" onPress={handleSaveEdit} loading={savingEdit} />
+                </View>
               </View>
             </View>
-          </View>
+          </ScrollView>
         </View>
       </Modal>
     </PageShell>
@@ -444,6 +578,11 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(15, 23, 42, 0.5)',
     justifyContent: 'flex-end',
   },
+  modalCardWrap: {
+    maxHeight: '92%',
+    marginTop: 'auto',
+  },
+  modalScroll: { flexGrow: 1 },
   modalCard: {
     backgroundColor: '#fff',
     borderTopLeftRadius: 16,
@@ -451,6 +590,36 @@ const styles = StyleSheet.create({
     padding: 20,
     gap: 8,
   },
+  sectionTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: colors.text,
+    marginTop: 12,
+    marginBottom: 4,
+  },
+  supervisorNote: {
+    fontSize: 13,
+    color: colors.warning,
+    backgroundColor: '#fffbeb',
+    borderWidth: 1,
+    borderColor: '#fde68a',
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 8,
+  },
+  switchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 10,
+    padding: 12,
+    marginTop: 4,
+    marginBottom: 8,
+  },
+  switchText: { flex: 1, paddingRight: 12 },
+  switchLabel: { fontSize: 14, fontWeight: '600', color: colors.text },
   modalActions: { flexDirection: 'row', gap: 10, marginTop: 8 },
   cancelBtn: {
     flex: 1,

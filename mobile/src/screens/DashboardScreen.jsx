@@ -37,11 +37,13 @@ export default function DashboardScreen({ navigation }) {
           value={String(summary?.workerCount ?? 0)}
           icon="people-outline"
           tone="brand"
+          delay={0}
         />
         <StatCard
           label="Distributors"
           value={String(summary?.distributorCount ?? 0)}
           icon="briefcase-outline"
+          delay={80}
         />
         <StatCard
           label="Marked Today"
@@ -49,6 +51,7 @@ export default function DashboardScreen({ navigation }) {
           sub={`${summary?.unmarkedToday ?? 0} unmarked`}
           icon="calendar-outline"
           tone="success"
+          delay={160}
         />
         <StatCard
           label="Pending Pay"
@@ -56,6 +59,7 @@ export default function DashboardScreen({ navigation }) {
           sub={`${summary?.pendingAccrualCount ?? 0} accruals`}
           icon="wallet-outline"
           tone="warning"
+          delay={240}
         />
       </View>
     </ScreenLayout>

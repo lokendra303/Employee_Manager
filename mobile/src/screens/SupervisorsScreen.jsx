@@ -137,13 +137,8 @@ export default function SupervisorsScreen() {
       }
       await api.put(`/reports/supervisors/${editingSupervisor.id}`, payload);
       setMessage('Supervisor profile updated');
-      setProfileForm((f) => ({ ...f, password: '' }));
-      const refreshed = await load();
-      const updated = refreshed.find((s) => s.id === editingSupervisor.id);
-      if (updated) {
-        setEditingSupervisor(updated);
-        setSelectedWorkers(updated.supervisorAssignments?.map((a) => a.workerId) || []);
-      }
+      closeEdit();
+      await load();
     } catch (err) {
       setError(err.message);
     } finally {
@@ -167,6 +162,7 @@ export default function SupervisorsScreen() {
         workerIds: selectedWorkers,
       });
       setMessage('Worker assignments saved');
+      closeEdit();
       await load();
     } catch (err) {
       setError(err.message);
@@ -270,9 +266,19 @@ export default function SupervisorsScreen() {
         )}
       </ScrollView>
 
-      <Modal visible={!!editingSupervisor} transparent animationType="slide">
+      <Modal
+        visible={!!editingSupervisor}
+        transparent
+        animationType="slide"
+        onRequestClose={closeEdit}
+      >
         <View style={styles.modalBackdrop}>
-          <ScrollView contentContainerStyle={styles.modalScroll}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={closeEdit} />
+          <ScrollView
+            style={styles.modalCardWrap}
+            contentContainerStyle={styles.modalScroll}
+            keyboardShouldPersistTaps="handled"
+          >
             <View style={styles.modalCard}>
               <Text style={styles.formTitle}>Edit Supervisor</Text>
               {editingSupervisor?.distributorProfile ? (
@@ -426,7 +432,11 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(15, 23, 42, 0.5)',
     justifyContent: 'flex-end',
   },
-  modalScroll: { flexGrow: 1, justifyContent: 'flex-end' },
+  modalCardWrap: {
+    maxHeight: '92%',
+    marginTop: 'auto',
+  },
+  modalScroll: { flexGrow: 1 },
   modalCard: {
     backgroundColor: '#fff',
     borderTopLeftRadius: 16,

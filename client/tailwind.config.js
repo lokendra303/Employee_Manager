@@ -33,6 +33,25 @@ export default {
         'mesh': 'radial-gradient(at 40% 20%, rgba(20, 184, 166, 0.12) 0px, transparent 50%), radial-gradient(at 80% 0%, rgba(15, 118, 110, 0.08) 0px, transparent 50%), radial-gradient(at 0% 50%, rgba(45, 212, 191, 0.06) 0px, transparent 50%)',
         'sidebar': 'linear-gradient(180deg, #0f172a 0%, #1e293b 50%, #0f172a 100%)',
       },
+      keyframes: {
+        fadeInUp: {
+          from: { opacity: '0', transform: 'translateY(12px)' },
+          to: { opacity: '1', transform: 'translateY(0)' },
+        },
+        slideInRight: {
+          from: { opacity: '0', transform: 'translateX(-8px)' },
+          to: { opacity: '1', transform: 'translateX(0)' },
+        },
+        scaleIn: {
+          from: { opacity: '0', transform: 'scale(0.96)' },
+          to: { opacity: '1', transform: 'scale(1)' },
+        },
+      },
+      animation: {
+        'fade-in-up': 'fadeInUp 0.5s cubic-bezier(0.22, 1, 0.36, 1) both',
+        'slide-in-right': 'slideInRight 0.4s cubic-bezier(0.22, 1, 0.36, 1) both',
+        'scale-in': 'scaleIn 0.35s cubic-bezier(0.22, 1, 0.36, 1) both',
+      },
     },
   },
   plugins: [],

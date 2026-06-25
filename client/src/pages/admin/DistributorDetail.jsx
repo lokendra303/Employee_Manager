@@ -14,9 +14,11 @@ export default function DistributorDetail({ distributorId }) {
   const [distributor, setDistributor] = useState(null);
   const [supervisors, setSupervisors] = useState([]);
   const [profileForm, setProfileForm] = useState({ name: '', contactPhone: '', contactEmail: '' });
+  const [loginForm, setLoginForm] = useState({ name: '', email: '', password: '', isActive: true });
   const [linkUserId, setLinkUserId] = useState('');
   const [loading, setLoading] = useState(true);
   const [savingProfile, setSavingProfile] = useState(false);
+  const [savingLogin, setSavingLogin] = useState(false);
   const [savingLink, setSavingLink] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
@@ -34,6 +36,16 @@ export default function DistributorDetail({ distributorId }) {
         contactEmail: dRes.data.contactEmail || '',
       });
       setLinkUserId(dRes.data.linkedUser?.id ? String(dRes.data.linkedUser.id) : '');
+      if (dRes.data.linkedUser?.role === 'DISTRIBUTOR') {
+        setLoginForm({
+          name: dRes.data.linkedUser.name || '',
+          email: dRes.data.linkedUser.email || '',
+          password: '',
+          isActive: dRes.data.linkedUser.isActive ?? true,
+        });
+      } else {
+        setLoginForm({ name: '', email: '', password: '', isActive: true });
+      }
       setSupervisors(sRes.data);
     } catch (err) {
       setError(err.message);
@@ -63,6 +75,47 @@ export default function DistributorDetail({ distributorId }) {
       setError(err.message);
     } finally {
       setSavingProfile(false);
+    }
+  };
+
+  const saveLogin = async (e) => {
+    e.preventDefault();
+    setSavingLogin(true);
+    setError('');
+    setMessage('');
+    try {
+      const hasDistributorLogin = distributor?.linkedUser?.role === 'DISTRIBUTOR';
+      if (hasDistributorLogin) {
+        const payload = {
+          name: loginForm.name.trim(),
+          email: loginForm.email.trim(),
+          isActive: loginForm.isActive,
+        };
+        if (loginForm.password.trim()) {
+          payload.password = loginForm.password;
+        }
+        await api.put(`/distributors/${distributorId}/login-account`, payload);
+        setMessage('Distributor login updated');
+        setLoginForm((f) => ({ ...f, password: '' }));
+      } else {
+        if (!loginForm.name.trim() || !loginForm.email.trim() || !loginForm.password.trim()) {
+          setError('Name, login email, and password are required');
+          setSavingLogin(false);
+          return;
+        }
+        await api.post(`/distributors/${distributorId}/login-account`, {
+          name: loginForm.name.trim(),
+          email: loginForm.email.trim(),
+          password: loginForm.password,
+        });
+        setMessage('Distributor login created');
+        setLoginForm((f) => ({ ...f, password: '' }));
+      }
+      await load();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSavingLogin(false);
     }
   };
 
@@ -175,10 +228,94 @@ export default function DistributorDetail({ distributorId }) {
       </div>
 
       <div className="card space-y-4">
-        <h3 className="font-semibold text-ink-900">Linked Login Account</h3>
+        <h3 className="font-semibold text-ink-900">Distributor Login Account</h3>
         <p className="text-sm text-ink-500">
-          Link a supervisor or distributor user so they can pay workers and manage wallet for this distributor.
-          A supervisor can hold both roles — they keep supervisor access plus distributor wallet/payments.
+          Create email and password so this distributor can sign in to the mobile app or web portal,
+          pay workers, and manage their wallet.
+        </p>
+
+        {distributor.linkedUser?.role === 'SUPERVISOR' ? (
+          <div className="p-3 rounded-xl bg-amber-50 border border-amber-100 text-sm text-amber-900">
+            This distributor uses a <strong>supervisor</strong> login ({distributor.linkedUser.email}).
+            Edit name, email, or password on the{' '}
+            <Link to="/supervisors" className="font-semibold text-primary-700 hover:underline">
+              Supervisors
+            </Link>{' '}
+            page.
+          </div>
+        ) : (
+          <form onSubmit={saveLogin} className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="label">Display Name</label>
+                <input
+                  className="input"
+                  value={loginForm.name}
+                  onChange={(e) => setLoginForm({ ...loginForm, name: e.target.value })}
+                  placeholder="Name shown in app"
+                  required
+                />
+              </div>
+              <div>
+                <label className="label">Login Email</label>
+                <input
+                  type="email"
+                  className="input"
+                  value={loginForm.email}
+                  onChange={(e) => setLoginForm({ ...loginForm, email: e.target.value })}
+                  placeholder="distributor@company.com"
+                  required
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <label className="label">
+                  {distributor.linkedUser?.role === 'DISTRIBUTOR'
+                    ? 'New Password (leave blank to keep current)'
+                    : 'Password'}
+                </label>
+                <input
+                  type="password"
+                  className="input"
+                  value={loginForm.password}
+                  onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
+                  placeholder="Min 6 characters"
+                  required={distributor.linkedUser?.role !== 'DISTRIBUTOR'}
+                  minLength={loginForm.password ? 6 : undefined}
+                />
+              </div>
+            </div>
+
+            {distributor.linkedUser?.role === 'DISTRIBUTOR' && (
+              <label className="flex items-center gap-3 p-3 rounded-xl border border-ink-200 cursor-pointer">
+                <input
+                  type="checkbox"
+                  className="w-4 h-4"
+                  checked={loginForm.isActive}
+                  onChange={(e) => setLoginForm({ ...loginForm, isActive: e.target.checked })}
+                />
+                <div>
+                  <p className="text-sm font-semibold text-ink-900">Account active</p>
+                  <p className="text-xs text-ink-500">Inactive accounts cannot sign in</p>
+                </div>
+              </label>
+            )}
+
+            <button type="submit" className="btn-primary" disabled={savingLogin}>
+              {savingLogin
+                ? 'Saving...'
+                : distributor.linkedUser?.role === 'DISTRIBUTOR'
+                  ? 'Save Login'
+                  : 'Create Login Account'}
+            </button>
+          </form>
+        )}
+      </div>
+
+      <div className="card space-y-4">
+        <h3 className="font-semibold text-ink-900">Link Existing Supervisor (optional)</h3>
+        <p className="text-sm text-ink-500">
+          Alternatively, link an existing supervisor so they can also act as this distributor.
+          A supervisor keeps supervisor access plus distributor wallet/payments.
         </p>
 
         {distributor.linkedUser ? (

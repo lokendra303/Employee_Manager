@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import api from '../../api/client';
 
 const STATUS_STYLES = {
+  LOOKS_REASONABLE: 'bg-green-100 text-green-800 border-green-200',
   CORRECT: 'bg-green-100 text-green-800 border-green-200',
   PAYMENT_CHANGED: 'bg-orange-100 text-orange-800 border-orange-200',
   OVER_REQUESTED: 'bg-red-100 text-red-800 border-red-200',
@@ -9,6 +10,14 @@ const STATUS_STYLES = {
 };
 
 function VerificationPanel({ verification, onApprove, onReject }) {
+  const [approvedAmount, setApprovedAmount] = useState('');
+
+  useEffect(() => {
+    if (verification?.atRequest?.requestedAmount != null) {
+      setApprovedAmount(String(verification.atRequest.requestedAmount));
+    }
+  }, [verification?.fundRequestId, verification?.atRequest?.requestedAmount]);
+
   if (!verification) return null;
 
   const { isCorrect, verificationStatus, message, atRequest, current, comparison, workerComparison } =
@@ -18,15 +27,17 @@ function VerificationPanel({ verification, onApprove, onReject }) {
     <div className="border-t pt-4 space-y-4">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h4 className="font-semibold">Cross Verification (live data)</h4>
-          <p className="text-sm text-gray-500 mt-1">Compared against current attendance & accrual records</p>
+          <h4 className="font-semibold">Reference Check (live data)</h4>
+          <p className="text-sm text-gray-500 mt-1">
+            Worker payment info for your review — approval is not tied to these numbers
+          </p>
         </div>
         <span
           className={`text-sm font-medium px-3 py-1 rounded-full border ${
             STATUS_STYLES[verificationStatus] || 'bg-gray-100'
           }`}
         >
-          {isCorrect ? 'Verified Correct' : verificationStatus.replace(/_/g, ' ')}
+          {isCorrect ? 'Looks reasonable' : verificationStatus.replace(/_/g, ' ')}
         </span>
       </div>
 
@@ -146,28 +157,35 @@ function VerificationPanel({ verification, onApprove, onReject }) {
       )}
 
       {onApprove && onReject && (
-        <div className="flex flex-col sm:flex-row gap-2 pt-2">
-          <button
-            type="button"
-            className="btn-primary flex-1"
-            onClick={() => onApprove(verification)}
-          >
-            {isCorrect
-              ? 'Approve Request'
-              : `Approve ₹${current.fundNeeded?.toLocaleString()} (verified amount)`}
-          </button>
-          {!isCorrect && (
+        <div className="space-y-3 pt-2 border-t">
+          <div>
+            <label className="label">Approved amount (₹)</label>
+            <input
+              type="number"
+              className="input"
+              value={approvedAmount}
+              onChange={(e) => setApprovedAmount(e.target.value)}
+              min="1"
+              required
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              Requester asked for ₹{atRequest.requestedAmount?.toLocaleString()}. You can approve a different
+              amount — they will be notified.
+            </p>
+          </div>
+          <div className="flex flex-col sm:flex-row gap-2">
             <button
               type="button"
-              className="btn-secondary flex-1"
-              onClick={() => onApprove(verification, true)}
+              className="btn-primary flex-1"
+              onClick={() => onApprove(verification, Number(approvedAmount))}
+              disabled={!approvedAmount || Number(approvedAmount) <= 0}
             >
-              Approve requested ₹{atRequest.requestedAmount?.toLocaleString()} anyway
+              Approve ₹{Number(approvedAmount || 0).toLocaleString()}
             </button>
-          )}
-          <button type="button" className="btn-danger sm:w-32" onClick={onReject}>
-            Reject
-          </button>
+            <button type="button" className="btn-danger sm:w-32" onClick={onReject}>
+              Reject
+            </button>
+          </div>
         </div>
       )}
     </div>
@@ -218,20 +236,16 @@ export default function AdminFundRequests() {
     }
   };
 
-  const approve = async (verification, useRequestedAmount = false) => {
+  const approve = async (verification, approvedAmount) => {
     const id = verification.fundRequestId;
-    const amount = useRequestedAmount
-      ? verification.atRequest.requestedAmount
-      : verification.isCorrect
-        ? verification.atRequest.requestedAmount
-        : verification.current.fundNeeded;
 
     try {
       await api.post(`/fund-requests/${id}/approve`, {
-        approvedAmount: amount,
-        acknowledgeMismatch: !verification.isCorrect || useRequestedAmount,
+        approvedAmount,
       });
-      setMessage(`Fund request approved — ₹${amount?.toLocaleString()}. Mark funds as sent when transferred.`);
+      setMessage(
+        `Fund request approved for ₹${approvedAmount?.toLocaleString()}. Requester has been notified.`
+      );
       setExpandedId(null);
       load();
     } catch (err) {
@@ -275,7 +289,7 @@ export default function AdminFundRequests() {
       <div>
         <h2 className="text-xl font-bold">Fund Requests</h2>
         <p className="text-sm text-gray-500 mt-1">
-          Approve requests, mark funds sent, then requester accepts to credit their wallet
+          Review requests, set approved amount, mark funds sent, then requester accepts to credit wallet
         </p>
       </div>
 
@@ -348,7 +362,7 @@ export default function AdminFundRequests() {
                       onClick={() => runVerification(r.id)}
                       disabled={verifyingId === r.id}
                     >
-                      {verifyingId === r.id ? 'Verifying...' : 'Cross Verify'}
+                      {verifyingId === r.id ? 'Checking...' : 'Reference Check'}
                     </button>
                     {expandedId !== r.id && (
                       <button type="button" className="btn-danger" onClick={() => setRejectId(r.id)}>

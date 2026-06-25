@@ -9,8 +9,8 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useApiConfig } from '../context/ApiConfigContext';
-import ApiServerPicker from '../components/ApiServerPicker';
 import api from '../api/client';
 import { ErrorBanner, PrimaryButton, Screen, SuccessBanner } from '../components/ui';
 import { colors } from '../theme';
@@ -28,13 +28,13 @@ export default function RegisterOrganizationScreen({ navigation }) {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
-  const { apiBaseUrl } = useApiConfig();
+  const { apiBaseUrl, configError, bootstrapping } = useApiConfig();
 
   const handleSubmit = async () => {
     setError('');
     setSuccess('');
     if (!apiBaseUrl) {
-      setError('Set API URL first (tap the bar above)');
+      setError(configError || 'Server not configured. Contact your system administrator.');
       return;
     }
     if (!form.organizationName.trim() || !form.adminName.trim() || !form.adminEmail.trim()) {
@@ -72,7 +72,9 @@ export default function RegisterOrganizationScreen({ navigation }) {
       >
         <ScrollView
           contentContainerStyle={styles.container}
-          keyboardShouldPersistTaps="handled"
+          keyboardShouldPersistTaps="always"
+          keyboardDismissMode="none"
+          showsVerticalScrollIndicator={false}
         >
           <View style={styles.brand}>
             <Text style={styles.title}>Register Organization</Text>
@@ -83,10 +85,14 @@ export default function RegisterOrganizationScreen({ navigation }) {
           </View>
 
           <View style={styles.form}>
-            <ApiServerPicker
-              compact
-              onSaved={() => navigation.navigate('ApiSettings')}
-            />
+            {!bootstrapping && !apiBaseUrl ? (
+              <View style={styles.configWarn}>
+                <Ionicons name="cloud-offline-outline" size={20} color="#c2410c" />
+                <Text style={styles.configWarnText}>
+                  {configError || 'Server URL not configured yet. Contact your system administrator.'}
+                </Text>
+              </View>
+            ) : null}
 
             <ErrorBanner message={error} />
             <SuccessBanner message={success} />
@@ -148,6 +154,7 @@ export default function RegisterOrganizationScreen({ navigation }) {
               loading={loading}
               disabled={
                 !!success ||
+                !apiBaseUrl ||
                 !form.organizationName ||
                 !form.adminName ||
                 !form.adminEmail ||
@@ -178,6 +185,18 @@ const styles = StyleSheet.create({
   title: { fontSize: 22, fontWeight: '700', color: colors.text },
   subtitle: { fontSize: 14, color: colors.textMuted, marginTop: 8, lineHeight: 20 },
   form: { gap: 8 },
+  configWarn: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    backgroundColor: '#fff7ed',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#fed7aa',
+    padding: 12,
+    marginBottom: 4,
+  },
+  configWarnText: { flex: 1, fontSize: 13, color: '#c2410c', lineHeight: 18 },
   section: {
     fontSize: 14,
     fontWeight: '600',

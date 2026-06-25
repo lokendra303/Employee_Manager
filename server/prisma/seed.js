@@ -176,6 +176,16 @@ async function main() {
     },
   });
 
+  const defaultApiUrl = process.env.PUBLIC_API_URL || process.env.API_PUBLIC_URL || 'http://localhost:5000/api/v1';
+  await prisma.systemSetting.upsert({
+    where: { key: 'public_api_base_url' },
+    update: {},
+    create: {
+      key: 'public_api_base_url',
+      value: defaultApiUrl,
+    },
+  });
+
   console.log('Seed completed:');
   console.log('  System Admin: system@attendance.com / system123');
   console.log('  Org Admin:    admin@attendance.com / admin123  (Demo Construction Co.)');

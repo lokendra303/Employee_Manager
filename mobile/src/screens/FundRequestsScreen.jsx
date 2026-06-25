@@ -41,6 +41,8 @@ function FundRequestCard({
   onNoteTextChange,
   notes,
   loadingNotes,
+  approveAmount,
+  onApproveAmountChange,
 }) {
   const requesterName = req.requestedBy?.name || req.requesterType;
 
@@ -64,6 +66,14 @@ function FundRequestCard({
 
       {req.notes ? (
         <Text style={styles.inlineNote}>Request note: {req.notes}</Text>
+      ) : null}
+      {req.approvedAmount != null ? (
+        <Text style={styles.inlineApproved}>
+          Approved: ₹{(req.approvedAmount ?? 0).toLocaleString()}
+          {req.approvedAmount !== req.requestedAmount
+            ? ` (requested ₹${(req.requestedAmount ?? 0).toLocaleString()})`
+            : ''}
+        </Text>
       ) : null}
       {req.rejectReason ? (
         <Text style={styles.inlineReject}>Rejected: {req.rejectReason}</Text>
@@ -110,9 +120,16 @@ function FundRequestCard({
 
           {isAdmin && req.status === 'PENDING' ? (
             <View style={styles.actions}>
+              <InputField
+                label="Approved amount"
+                value={approveAmount}
+                onChangeText={onApproveAmountChange}
+                keyboardType="numeric"
+                placeholder={String(req.requestedAmount ?? '')}
+              />
               <PrimaryButton
-                title="Approve"
-                onPress={() => onApprove(req.id, req.requestedAmount)}
+                title={`Approve ₹${Number(approveAmount || req.requestedAmount || 0).toLocaleString()}`}
+                onPress={() => onApprove(req.id, Number(approveAmount || req.requestedAmount))}
               />
               <SecondaryButton title="Reject" danger onPress={() => onReject(req.id)} />
             </View>
@@ -140,6 +157,7 @@ export default function FundRequestsScreen({ navigation, route }) {
   const [threadNotes, setThreadNotes] = useState({});
   const [loadingNotes, setLoadingNotes] = useState(false);
   const [replyText, setReplyText] = useState({});
+  const [approveAmounts, setApproveAmounts] = useState({});
 
   const load = async () => {
     try {
@@ -191,6 +209,13 @@ export default function FundRequestsScreen({ navigation, route }) {
       return;
     }
     setExpandedId(id);
+    const req = requests.find((r) => r.id === id);
+    if (req?.requestedAmount != null) {
+      setApproveAmounts((prev) => ({
+        ...prev,
+        [id]: prev[id] ?? String(req.requestedAmount),
+      }));
+    }
     if (!threadNotes[id]) await loadNotes(id);
   };
 
@@ -225,12 +250,16 @@ export default function FundRequestsScreen({ navigation, route }) {
 
   const approveRequest = async (id, approvedAmount) => {
     const note = replyText[id]?.trim();
+    if (!approvedAmount || approvedAmount <= 0) {
+      setError('Enter a valid approved amount');
+      return;
+    }
     try {
       await api.post(`/fund-requests/${id}/approve`, {
         approvedAmount,
         notes: note || undefined,
       });
-      setMessage('Request approved — requester notified');
+      setMessage('Request approved — requester notified of approved amount');
       setReplyText((prev) => ({ ...prev, [id]: '' }));
       load();
       loadNotes(id);
@@ -354,6 +383,10 @@ export default function FundRequestsScreen({ navigation, route }) {
           onNoteTextChange={(text) => setReplyText((prev) => ({ ...prev, [req.id]: text }))}
           notes={threadNotes[req.id] || []}
           loadingNotes={loadingNotes && expandedId === req.id}
+          approveAmount={approveAmounts[req.id] ?? String(req.requestedAmount ?? '')}
+          onApproveAmountChange={(text) =>
+            setApproveAmounts((prev) => ({ ...prev, [req.id]: text }))
+          }
         />
       ))}
       {!requests.length ? <Text style={styles.empty}>No fund requests yet</Text> : null}
@@ -370,6 +403,7 @@ const styles = StyleSheet.create({
   cardTitle: { fontSize: 20, fontWeight: '800', color: colors.text },
   cardMeta: { fontSize: 12, color: colors.textMuted, marginTop: 4 },
   inlineNote: { fontSize: 13, color: colors.textSecondary, marginTop: spacing.sm, fontStyle: 'italic' },
+  inlineApproved: { fontSize: 13, color: colors.primary, marginTop: spacing.sm, fontWeight: '600' },
   inlineReject: { fontSize: 13, color: colors.danger, marginTop: spacing.sm, fontWeight: '500' },
   expanded: { marginTop: spacing.md, gap: spacing.sm },
   notesTitle: {

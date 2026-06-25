@@ -10,6 +10,59 @@ import { getWorkerForUser, getDistributorForUser } from '../services/access.js';
 import { toDateOnly, getAttendanceEditState } from '../services/attendanceRules.js';
 import { addDays } from '../lib/dates.js';
 
+async function enrichWorkersWithStats(workers) {
+  if (!workers.length) return workers;
+
+  const ids = workers.map((w) => w.id);
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+
+  const [unpaidRows, paidRows, attendanceRows] = await Promise.all([
+    prisma.payAccrual.groupBy({
+      by: ['workerId'],
+      where: { workerId: { in: ids }, status: 'ACCRUED' },
+      _sum: { amount: true },
+    }),
+    prisma.payAccrual.groupBy({
+      by: ['workerId'],
+      where: { workerId: { in: ids }, status: 'PAID' },
+      _sum: { amount: true },
+    }),
+    prisma.attendanceRecord.findMany({
+      where: {
+        workerId: { in: ids },
+        workDate: { gte: monthStart, lte: monthEnd },
+      },
+      select: { workerId: true, status: true },
+    }),
+  ]);
+
+  const unpaidMap = Object.fromEntries(
+    unpaidRows.map((row) => [row.workerId, Number(row._sum.amount || 0)])
+  );
+  const paidMap = Object.fromEntries(
+    paidRows.map((row) => [row.workerId, Number(row._sum.amount || 0)])
+  );
+
+  const attendanceMap = {};
+  for (const row of attendanceRows) {
+    if (!attendanceMap[row.workerId]) {
+      attendanceMap[row.workerId] = { present: 0, halfDay: 0, absent: 0 };
+    }
+    if (row.status === 'PRESENT') attendanceMap[row.workerId].present += 1;
+    else if (row.status === 'HALF_DAY') attendanceMap[row.workerId].halfDay += 1;
+    else if (row.status === 'ABSENT') attendanceMap[row.workerId].absent += 1;
+  }
+
+  return workers.map((w) => ({
+    ...w,
+    unpaidBalance: unpaidMap[w.id] || 0,
+    totalPaid: paidMap[w.id] || 0,
+    monthAttendance: attendanceMap[w.id] || { present: 0, halfDay: 0, absent: 0 },
+  }));
+}
+
 const router = Router();
 
 const workerSchema = z.object({
@@ -78,7 +131,8 @@ router.get('/', requireRole('ADMIN', 'SUPERVISOR', 'DISTRIBUTOR'), async (req, r
       };
     });
 
-    return success(res, enriched);
+    const withStats = await enrichWorkersWithStats(enriched);
+    return success(res, withStats);
   } catch (err) {
     return error(res, 'SERVER_ERROR', err.message, 500);
   }
@@ -259,10 +313,44 @@ router.get('/:id/profile', requireRole('ADMIN', 'SUPERVISOR', 'DISTRIBUTOR'), as
     }
 
     const period = getCurrentPayPeriod(worker);
-    const unpaidBalance = await prisma.payAccrual.aggregate({
-      where: { workerId: id, status: 'ACCRUED' },
-      _sum: { amount: true },
-    });
+    const [unpaidBalance, totalPaidAgg, monthEarnedAgg, monthDisbursedAgg] = await Promise.all([
+      prisma.payAccrual.aggregate({
+        where: { workerId: id, status: 'ACCRUED' },
+        _sum: { amount: true },
+      }),
+      prisma.payAccrual.aggregate({
+        where: { workerId: id, status: 'PAID' },
+        _sum: { amount: true },
+      }),
+      prisma.payAccrual.aggregate({
+        where: { workerId: id, workDate: { gte: fromDate, lte: toDate } },
+        _sum: { amount: true },
+      }),
+      prisma.distributorTransaction.aggregate({
+        where: {
+          workerId: id,
+          type: 'DISBURSEMENT',
+          createdAt: {
+            gte: fromDate,
+            lte: new Date(toDate.getTime() + 24 * 60 * 60 * 1000 - 1),
+          },
+        },
+        _sum: { amount: true },
+      }),
+    ]);
+
+    const attendanceSummary = calendar.reduce(
+      (acc, day) => {
+        if (day.status === 'PRESENT') acc.present += 1;
+        else if (day.status === 'HALF_DAY') acc.halfDay += 1;
+        else if (day.status === 'ABSENT') acc.absent += 1;
+        else acc.unmarked += 1;
+        return acc;
+      },
+      { present: 0, halfDay: 0, absent: 0, unmarked: 0 }
+    );
+
+    const totalDisbursed = transactions.reduce((sum, t) => sum + Number(t.amount || 0), 0);
 
     return success(res, {
       worker: {
@@ -278,6 +366,17 @@ router.get('/:id/profile', requireRole('ADMIN', 'SUPERVISOR', 'DISTRIBUTOR'), as
           end: period.periodEnd.toISOString().slice(0, 10),
         },
         unpaidBalance: Number(unpaidBalance._sum.amount || 0),
+        totalPaid: Number(totalPaidAgg._sum.amount || 0),
+        totalDisbursed,
+      },
+      summary: {
+        monthEarned: Number(monthEarnedAgg._sum.amount || 0),
+        monthPaid: Number(monthDisbursedAgg._sum.amount || 0),
+        monthRemaining: Math.max(
+          0,
+          Number(monthEarnedAgg._sum.amount || 0) - Number(monthDisbursedAgg._sum.amount || 0)
+        ),
+        attendance: attendanceSummary,
       },
       range: {
         from: fromDate.toISOString().slice(0, 10),

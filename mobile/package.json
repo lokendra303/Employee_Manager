@@ -11,6 +11,7 @@
     "axios": "^1.18.1",
     "expo": "~56.0.12",
     "expo-constants": "~56.0.18",
+    "expo-linear-gradient": "~56.0.4",
     "expo-status-bar": "~56.0.4",
     "react": "19.2.3",
     "react-dom": "19.2.3",
@@ -25,10 +26,17 @@
     "ios": "expo run:ios",
     "web": "expo start --web",
     "prebuild": "expo prebuild --platform android",
+    "prebuild:ios": "expo prebuild --platform ios",
     "build:android": "expo run:android --variant release",
     "build:android:apk": "cd android && gradlew.bat assembleRelease",
     "build:android:debug": "cd android && gradlew.bat assembleDebug",
+    "build:ios": "eas build --platform ios --profile preview",
+    "build:ios:simulator": "eas build --platform ios --profile preview-simulator",
+    "build:ios:production": "eas build --platform ios --profile production",
     "apk:copy": "powershell -Command \"New-Item -ItemType Directory -Force -Path releases | Out-Null; Copy-Item android/app/build/outputs/apk/release/app-release.apk releases/AttendanceManager-v1.0.0.apk -Force\""
   },
-  "private": true
+  "private": true,
+  "devDependencies": {
+    "eas-cli": "^20.3.0"
+  }
 }

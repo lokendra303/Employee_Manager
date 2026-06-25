@@ -1,10 +1,13 @@
 import { useEffect, useState } from 'react';
 import api from '../../api/client';
+import { normalizeApiUrl, testApiConnection } from '../../utils/apiUrl';
 
 export default function SystemAdmin() {
   const [stats, setStats] = useState(null);
   const [organizations, setOrganizations] = useState([]);
   const [filter, setFilter] = useState('PENDING');
+  const [apiBaseUrl, setApiBaseUrl] = useState('');
+  const [apiSaving, setApiSaving] = useState(false);
   const [rejectId, setRejectId] = useState(null);
   const [rejectReason, setRejectReason] = useState('');
   const [suspendId, setSuspendId] = useState(null);
@@ -15,12 +18,14 @@ export default function SystemAdmin() {
   const load = async () => {
     try {
       setError('');
-      const [statsRes, orgsRes] = await Promise.all([
+      const [statsRes, orgsRes, settingsRes] = await Promise.all([
         api.get('/system/stats'),
         api.get(`/system/organizations?status=${filter}`),
+        api.get('/system/settings'),
       ]);
       setStats(statsRes.data);
       setOrganizations(orgsRes.data);
+      if (settingsRes.data?.apiBaseUrl) setApiBaseUrl(settingsRes.data.apiBaseUrl);
     } catch (err) {
       setError(err.message);
     }
@@ -78,6 +83,24 @@ export default function SystemAdmin() {
     }
   };
 
+  const saveApiUrl = async (e) => {
+    e.preventDefault();
+    setApiSaving(true);
+    setError('');
+    setMessage('');
+    try {
+      const normalized = normalizeApiUrl(apiBaseUrl);
+      await testApiConnection(normalized);
+      await api.put('/system/settings/api-url', { apiBaseUrl: normalized });
+      setApiBaseUrl(normalized);
+      setMessage('API URL updated for all devices');
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setApiSaving(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -93,6 +116,26 @@ export default function SystemAdmin() {
       {error && (
         <div className="bg-red-50 text-red-700 px-4 py-3 rounded-lg text-sm">{error}</div>
       )}
+
+      <form onSubmit={saveApiUrl} className="card space-y-3">
+        <div>
+          <h3 className="font-semibold text-ink-900">Global API URL</h3>
+          <p className="text-sm text-gray-500 mt-1">
+            All mobile apps fetch this URL automatically. Update it when you move the backend.
+          </p>
+        </div>
+        <input
+          type="url"
+          className="input"
+          value={apiBaseUrl}
+          onChange={(e) => setApiBaseUrl(e.target.value)}
+          placeholder="https://your-server.com/api/v1"
+          required
+        />
+        <button type="submit" className="btn-primary w-full sm:w-auto" disabled={apiSaving}>
+          {apiSaving ? 'Saving...' : 'Save API URL'}
+        </button>
+      </form>
 
       {stats && (
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">

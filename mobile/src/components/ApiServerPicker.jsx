@@ -19,7 +19,14 @@ import {
 } from './ui';
 import { colors } from '../theme';
 
-export default function ApiServerPicker({ onSaved, compact = false }) {
+export default function ApiServerPicker({
+  onSaved,
+  compact = false,
+  embedded = false,
+  saveToServer = false,
+  testBeforeSave = false,
+  showTestButton = false,
+}) {
   const {
     apiBaseUrl,
     inputUrl,
@@ -51,8 +58,8 @@ export default function ApiServerPicker({ onSaved, compact = false }) {
     setError('');
     setMessage('');
     try {
-      await saveApiUrl(inputUrl);
-      setMessage('API URL saved');
+      await saveApiUrl(inputUrl, { saveToServer, testBeforeSave });
+      setMessage(saveToServer ? 'API URL saved for all devices' : 'API URL saved');
       onSaved?.();
     } catch (err) {
       setError(err.message || 'Network Error');
@@ -76,46 +83,60 @@ export default function ApiServerPicker({ onSaved, compact = false }) {
     );
   }
 
-  return (
-    <ScrollView contentContainerStyle={styles.scroll}>
-      <Screen title="API URL" subtitle="Enter your backend URL and save">
-        {apiBaseUrl ? (
-          <View style={styles.current}>
-            <Text style={styles.currentLabel}>Currently using</Text>
-            <Text style={styles.currentUrl}>{apiBaseUrl}</Text>
+  const fields = (
+    <>
+      {!embedded && apiBaseUrl ? (
+        <View style={styles.current}>
+          <Text style={styles.currentLabel}>Currently using</Text>
+          <Text style={styles.currentUrl}>{apiBaseUrl}</Text>
+        </View>
+      ) : null}
+
+      <ErrorBanner message={error} />
+      <SuccessBanner message={message} />
+
+      <View style={[styles.field, embedded && styles.fieldEmbedded]}>
+        <Text style={styles.label}>API base URL</Text>
+        <TextInput
+          style={styles.input}
+          value={inputUrl}
+          onChangeText={setInputUrl}
+          placeholder="http://10.0.2.2:5000/api/v1"
+          placeholderTextColor={colors.textMuted}
+          autoCapitalize="none"
+          autoCorrect={false}
+          keyboardType="url"
+        />
+        <Text style={styles.hint}>
+          {Platform.OS === 'web'
+            ? 'Example: http://localhost:5000/api/v1'
+            : 'Example: http://10.0.2.2:5000/api/v1 (emulator) or http://YOUR_PC_IP:5000/api/v1 (phone). /api/v1 is added automatically if you omit it.'}
+        </Text>
+        {usesLocalhost ? (
+          <View style={styles.warn}>
+            <Text style={styles.warnText}>
+              localhost points to the phone/emulator, not your PC. Use 10.0.2.2
+              (emulator) or your computer&apos;s Wi‑Fi IP instead.
+            </Text>
           </View>
         ) : null}
+      </View>
 
-        <ErrorBanner message={error} />
-        <SuccessBanner message={message} />
+      {showTestButton && embedded ? (
+        <Pressable
+          style={[styles.testBtn, styles.testBtnEmbedded]}
+          onPress={handleTest}
+          disabled={testing || saving || !inputUrl.trim()}
+        >
+          {testing ? (
+            <ActivityIndicator color={colors.primary} />
+          ) : (
+            <Text style={styles.testBtnText}>Test connection</Text>
+          )}
+        </Pressable>
+      ) : null}
 
-        <View style={styles.field}>
-          <Text style={styles.label}>API base URL</Text>
-          <TextInput
-            style={styles.input}
-            value={inputUrl}
-            onChangeText={setInputUrl}
-            placeholder="http://10.0.2.2:5000/api/v1"
-            placeholderTextColor={colors.textMuted}
-            autoCapitalize="none"
-            autoCorrect={false}
-            keyboardType="url"
-          />
-          <Text style={styles.hint}>
-            {Platform.OS === 'web'
-              ? 'Example: http://localhost:5000/api/v1'
-              : 'Example: http://10.0.2.2:5000/api/v1 (emulator) or http://YOUR_PC_IP:5000/api/v1 (phone). /api/v1 is added automatically if you omit it.'}
-          </Text>
-          {usesLocalhost ? (
-            <View style={styles.warn}>
-              <Text style={styles.warnText}>
-                localhost points to the phone/emulator, not your PC. Use 10.0.2.2
-                (emulator) or your computer&apos;s Wi‑Fi IP instead.
-              </Text>
-            </View>
-          ) : null}
-        </View>
-
+      {!embedded ? (
         <View style={styles.actions}>
           <Pressable
             style={styles.testBtn}
@@ -129,12 +150,24 @@ export default function ApiServerPicker({ onSaved, compact = false }) {
             )}
           </Pressable>
           <PrimaryButton
-            title="Save"
+            title={saveToServer ? 'Save for all devices' : 'Save'}
             onPress={handleSave}
             loading={saving}
             disabled={testing || !inputUrl.trim()}
           />
         </View>
+      ) : null}
+    </>
+  );
+
+  if (embedded) {
+    return <View>{fields}</View>;
+  }
+
+  return (
+    <ScrollView contentContainerStyle={styles.scroll}>
+      <Screen title="API URL" subtitle="Enter your backend URL and save">
+        {fields}
       </Screen>
     </ScrollView>
   );
@@ -154,6 +187,7 @@ const styles = StyleSheet.create({
   currentLabel: { fontSize: 12, color: colors.textMuted, fontWeight: '600' },
   currentUrl: { fontSize: 13, color: colors.primary, marginTop: 4, fontWeight: '500' },
   field: { marginHorizontal: 16, marginTop: 8, gap: 6 },
+  fieldEmbedded: { marginHorizontal: 0, marginTop: 0 },
   label: { fontSize: 13, fontWeight: '600', color: colors.text },
   input: {
     borderWidth: 1,
@@ -182,6 +216,7 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     alignItems: 'center',
   },
+  testBtnEmbedded: { marginTop: 8 },
   testBtnText: { color: colors.primary, fontWeight: '600' },
   compact: {
     flexDirection: 'row',

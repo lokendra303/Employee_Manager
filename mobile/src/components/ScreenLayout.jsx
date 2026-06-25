@@ -8,6 +8,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AppHeader from './AppHeader';
+import { MeshBackground } from './motion';
 import { colors, spacing } from '../theme';
 
 export default function ScreenLayout({
@@ -58,6 +59,7 @@ export default function ScreenLayout({
   if (keyboard) {
     return (
       <SafeAreaView style={styles.safe} edges={edges}>
+        <MeshBackground />
         <KeyboardAvoidingView
           style={styles.fill}
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -70,6 +72,7 @@ export default function ScreenLayout({
 
   return (
     <SafeAreaView style={styles.safe} edges={edges}>
+      <MeshBackground />
       {inner}
     </SafeAreaView>
   );

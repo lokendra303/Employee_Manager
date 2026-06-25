@@ -1,6 +1,7 @@
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { setApiBaseUrl, testApiConnection } from '../api/client';
+import { fetchPublicConfig, setApiBaseUrl, testApiConnection } from '../api/client';
+import api from '../api/client';
 import {
   API_STORAGE_KEY,
   getEnvDefaultUrl,
@@ -9,22 +10,45 @@ import {
 
 const ApiConfigContext = createContext(null);
 
+async function applyUrl(url, { persist = true } = {}) {
+  if (persist) {
+    await AsyncStorage.setItem(API_STORAGE_KEY, url);
+  }
+  setApiBaseUrl(url);
+  return url;
+}
+
 export function ApiConfigProvider({ children }) {
   const [bootstrapping, setBootstrapping] = useState(true);
   const [apiBaseUrl, setApiBaseUrlState] = useState('');
   const [inputUrl, setInputUrl] = useState('');
   const [testing, setTesting] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [configError, setConfigError] = useState('');
 
   useEffect(() => {
     (async () => {
       try {
         const storedUrl = await AsyncStorage.getItem(API_STORAGE_KEY);
-        const url = storedUrl || getEnvDefaultUrl();
-        if (url) {
-          setApiBaseUrl(url);
-          setApiBaseUrlState(url);
-          setInputUrl(url);
+        const bootstrap = storedUrl || getEnvDefaultUrl();
+        let resolved = bootstrap;
+
+        if (bootstrap) {
+          setApiBaseUrl(bootstrap);
+          setApiBaseUrlState(bootstrap);
+          setInputUrl(bootstrap);
+
+          const serverUrl = await fetchPublicConfig(bootstrap);
+          if (serverUrl) {
+            resolved = serverUrl;
+            await applyUrl(serverUrl);
+            setApiBaseUrlState(serverUrl);
+            setInputUrl(serverUrl);
+          }
+        }
+
+        if (!resolved) {
+          setConfigError('Server not configured. Ask your system administrator to set the API URL.');
         }
       } finally {
         setBootstrapping(false);
@@ -32,8 +56,9 @@ export function ApiConfigProvider({ children }) {
     })();
   }, []);
 
-  const saveApiUrl = async (rawUrl, { testBeforeSave = false } = {}) => {
+  const saveApiUrl = async (rawUrl, { testBeforeSave = false, saveToServer = false } = {}) => {
     setSaving(true);
+    setConfigError('');
     try {
       const url = normalizeApiUrl(rawUrl);
 
@@ -44,16 +69,33 @@ export function ApiConfigProvider({ children }) {
         if (!ok) throw new Error('Server responded but health check failed');
       }
 
-      await AsyncStorage.setItem(API_STORAGE_KEY, url);
-      setApiBaseUrl(url);
+      await applyUrl(url);
       setApiBaseUrlState(url);
       setInputUrl(url);
+
+      if (saveToServer) {
+        await api.put('/system/settings/api-url', { apiBaseUrl: url });
+      }
+
       return url;
     } finally {
       setSaving(false);
       setTesting(false);
     }
   };
+
+  const syncFromServer = useCallback(async () => {
+    const bootstrap = apiBaseUrl || getEnvDefaultUrl();
+    if (!bootstrap) return null;
+    const serverUrl = await fetchPublicConfig(bootstrap);
+    if (serverUrl && serverUrl !== apiBaseUrl) {
+      await applyUrl(serverUrl);
+      setApiBaseUrlState(serverUrl);
+      setInputUrl(serverUrl);
+      setConfigError('');
+    }
+    return serverUrl;
+  }, [apiBaseUrl]);
 
   const testUrl = async (rawUrl) => {
     setTesting(true);
@@ -76,7 +118,9 @@ export function ApiConfigProvider({ children }) {
         bootstrapping,
         testing,
         saving,
+        configError,
         saveApiUrl,
+        syncFromServer,
         testUrl,
       }}
     >

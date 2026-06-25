@@ -13,6 +13,7 @@ import api from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import {
   ErrorBanner,
+  InputField,
   LoadingView,
   PrimaryButton,
   Screen,
@@ -38,6 +39,8 @@ export default function PaySalaryScreen({ route }) {
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [walletBalance, setWalletBalance] = useState(null);
+  const [personalAdvanceDue, setPersonalAdvanceDue] = useState(0);
+  const [paidFromPersonal, setPaidFromPersonal] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -57,8 +60,9 @@ export default function PaySalaryScreen({ route }) {
         }
 
         if (user?.role === 'DISTRIBUTOR' || user?.role === 'SUPERVISOR') {
-          const walletRes = await api.get('/wallet').catch(() => ({ data: { balance: 0 } }));
+          const walletRes = await api.get('/wallet').catch(() => ({ data: { balance: 0, personalAdvanceDue: 0 } }));
           setWalletBalance(walletRes.data.balance ?? 0);
+          setPersonalAdvanceDue(walletRes.data.personalAdvanceDue ?? 0);
         }
       } catch (err) {
         setError(err.message);
@@ -93,13 +97,24 @@ export default function PaySalaryScreen({ route }) {
     setError('');
     setMessage('');
     try {
-      await api.post(`/distributors/${distributorId}/transactions`, {
+      const res = await api.post(`/distributors/${distributorId}/transactions`, {
         workerId: selectedWorker,
         amount: payAmount,
         paymentMethod: method,
         notes: notes.trim() || undefined,
+        paidFromPersonal: paidFromPersonal || undefined,
       });
-      setMessage(`Payment of ₹${payAmount.toLocaleString()} recorded`);
+      const advance = res.data.personalAdvanceAmount ?? 0;
+      setMessage(
+        res.data.paidFromPersonal
+          ? `Payment recorded. Personal advance: ₹${(advance || payAmount).toLocaleString()}`
+          : `Payment of ₹${payAmount.toLocaleString()} recorded`
+      );
+      const walletRes = await api.get('/wallet').catch(() => null);
+      if (walletRes?.data) {
+        setWalletBalance(walletRes.data.balance ?? 0);
+        setPersonalAdvanceDue(walletRes.data.personalAdvanceDue ?? 0);
+      }
       const worker = workers.find((w) => w.id === selectedWorker);
       if (worker) selectWorker(worker);
       setAmount('');
@@ -122,7 +137,18 @@ export default function PaySalaryScreen({ route }) {
 
           {walletBalance != null ? (
             <View style={styles.wallet}>
-              <StatCard label="Wallet Balance" value={`₹${walletBalance.toLocaleString()}`} />
+              <StatCard
+                label="Wallet Balance"
+                value={`₹${walletBalance.toLocaleString()}`}
+                tone={walletBalance < 0 ? 'danger' : 'brand'}
+              />
+              {personalAdvanceDue > 0 ? (
+                <StatCard
+                  label="Personal Advance Due"
+                  value={`₹${personalAdvanceDue.toLocaleString()}`}
+                  tone="warning"
+                />
+              ) : null}
             </View>
           ) : null}
 
@@ -186,6 +212,16 @@ export default function PaySalaryScreen({ route }) {
                 placeholder="Optional"
               />
 
+              <Pressable
+                style={[styles.personalRow, paidFromPersonal && styles.personalRowActive]}
+                onPress={() => setPaidFromPersonal((v) => !v)}
+              >
+                <Text style={styles.personalLabel}>Paid from my personal money</Text>
+                <Text style={styles.personalHint}>
+                  If wallet is empty, shortfall is tracked as personal advance until fund is released.
+                </Text>
+              </Pressable>
+
               <PrimaryButton
                 title="Record Payment"
                 onPress={submitPayment}
@@ -201,7 +237,7 @@ export default function PaySalaryScreen({ route }) {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
-  wallet: { paddingHorizontal: 16, marginBottom: 8 },
+  wallet: { paddingHorizontal: 16, marginBottom: 8, gap: 8 },
   list: { padding: 16 },
   workerRow: {
     backgroundColor: '#fff',
@@ -243,4 +279,17 @@ const styles = StyleSheet.create({
   methodActive: { backgroundColor: colors.primary },
   methodText: { fontSize: 12, fontWeight: '600', color: colors.textMuted },
   methodTextActive: { color: '#fff' },
+  personalRow: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 10,
+    padding: 12,
+    backgroundColor: '#fff',
+  },
+  personalRowActive: {
+    borderColor: colors.warning,
+    backgroundColor: '#fffbeb',
+  },
+  personalLabel: { fontSize: 14, fontWeight: '600', color: colors.text },
+  personalHint: { fontSize: 12, color: colors.textMuted, marginTop: 4, lineHeight: 18 },
 });

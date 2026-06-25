@@ -13,14 +13,33 @@
     },
     "preview": {
       "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://lokendramanager.vercel.app/api/v1"
+      },
       "android": {
         "buildType": "apk"
+      },
+      "ios": {
+        "simulator": false
+      }
+    },
+    "preview-simulator": {
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://lokendramanager.vercel.app/api/v1"
+      },
+      "ios": {
+        "simulator": true
       }
     },
     "production": {
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://lokendramanager.vercel.app/api/v1"
+      },
       "android": {
         "buildType": "app-bundle"
-      }
+      },
+      "ios": {}
     }
   },
   "submit": {

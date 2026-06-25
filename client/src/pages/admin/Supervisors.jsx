@@ -15,6 +15,7 @@ export default function Supervisors() {
   const [error, setError] = useState('');
   const [form, setForm] = useState(emptySupervisor);
   const [showForm, setShowForm] = useState(false);
+  const [editingSupervisorId, setEditingSupervisorId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [savingProfile, setSavingProfile] = useState(false);
 
@@ -28,8 +29,20 @@ export default function Supervisors() {
       password: '',
       isActive: sup.isActive ?? true,
     });
-    setMessage('');
     setError('');
+  };
+
+  const openEdit = (sup) => {
+    applySupervisor(sup);
+    setMessage('');
+    setEditingSupervisorId(sup.id);
+  };
+
+  const closeEdit = () => {
+    setEditingSupervisorId(null);
+    setSelectedSupervisor('');
+    setProfileForm({ name: '', email: '', password: '', isActive: true });
+    setSelectedWorkers([]);
   };
 
   const load = async (keepSelection = true) => {
@@ -42,11 +55,9 @@ export default function Supervisors() {
       setSupervisors(list);
       setWorkers(wRes.data);
 
-      if (keepSelection && selectedSupervisor) {
-        const current = list.find((s) => s.id === Number(selectedSupervisor));
+      if (keepSelection && editingSupervisorId) {
+        const current = list.find((s) => s.id === editingSupervisorId);
         if (current) applySupervisor(current);
-      } else if (list.length > 0) {
-        applySupervisor(list[0]);
       }
 
       return list;
@@ -62,10 +73,6 @@ export default function Supervisors() {
     load(false);
   }, []);
 
-  const selectSupervisor = (id) => {
-    const sup = supervisors.find((s) => s.id === Number(id));
-    applySupervisor(sup);
-  };
 
   const toggleWorker = (workerId) => {
     setSelectedWorkers((prev) =>
@@ -86,7 +93,7 @@ export default function Supervisors() {
       setShowForm(false);
       setMessage(`Supervisor "${res.data.name}" added successfully`);
       await load();
-      applySupervisor(res.data);
+      openEdit(res.data);
     } catch (err) {
       setError(err.message);
     }
@@ -111,6 +118,7 @@ export default function Supervisors() {
       setMessage('Supervisor profile updated');
       setProfileForm((f) => ({ ...f, password: '' }));
       await load(true);
+      closeEdit();
     } catch (err) {
       setError(err.message);
     } finally {
@@ -128,13 +136,13 @@ export default function Supervisors() {
       });
       setMessage('Worker assignments saved');
       await load();
-      selectSupervisor(selectedSupervisor);
+      closeEdit();
     } catch (err) {
       setError(err.message);
     }
   };
 
-  const selectedData = supervisors.find((s) => s.id === Number(selectedSupervisor));
+  const selectedData = supervisors.find((s) => s.id === editingSupervisorId);
 
   if (loading) return <LoadingState label="Loading supervisors..." />;
 
@@ -215,9 +223,9 @@ export default function Supervisors() {
               <button
                 key={sup.id}
                 type="button"
-                onClick={() => selectSupervisor(sup.id)}
+                onClick={() => openEdit(sup)}
                 className={`w-full text-left p-4 rounded-xl border transition flex items-center gap-4 ${
-                  Number(selectedSupervisor) === sup.id
+                  editingSupervisorId === sup.id
                     ? 'border-primary-400 bg-primary-50/50 ring-1 ring-primary-200'
                     : 'border-ink-100 bg-white hover:border-ink-200'
                 }`}
@@ -242,13 +250,16 @@ export default function Supervisors() {
         )}
       </div>
 
-      {supervisors.length > 0 && !selectedSupervisor && (
-        <Alert type="info">Select a supervisor from the list above to edit their profile.</Alert>
-      )}
-
-      {selectedSupervisor && selectedData && (
-        <>
-          <form onSubmit={saveProfile} className="card space-y-4">
+      {editingSupervisorId && selectedData && (
+        <div
+          className="fixed inset-0 bg-ink-900/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-4 z-50"
+          onClick={closeEdit}
+        >
+          <div
+            className="card w-full max-w-lg max-h-[90vh] overflow-y-auto space-y-4 animate-fade-in"
+            onClick={(e) => e.stopPropagation()}
+          >
+          <form onSubmit={saveProfile} className="space-y-4">
             <div className="flex items-center gap-3">
               <Avatar name={selectedData.name} size="lg" />
               <div>
@@ -320,7 +331,7 @@ export default function Supervisors() {
             </button>
           </form>
 
-          <div className="card space-y-4">
+          <div className="space-y-4 pt-2 border-t border-ink-100">
             <h3 className="font-semibold text-ink-900">Assign Workers</h3>
             <p className="text-sm text-ink-500">
               {selectedData.name} can mark attendance and pay salary for checked workers only.
@@ -350,7 +361,12 @@ export default function Supervisors() {
               Save Worker Assignments
             </button>
           </div>
-        </>
+
+          <button type="button" className="btn-secondary w-full" onClick={closeEdit}>
+            Close
+          </button>
+          </div>
+        </div>
       )}
     </div>
   );

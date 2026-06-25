@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import {
   ActivityIndicator,
   Platform,
@@ -8,23 +9,22 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { colors, radius, shadow, spacing, typography, getStatCardWidth } from '../theme';
+import { FadeInUp, PulseLoader, webGradient } from './motion';
+import { colors, gradients, radius, shadow, spacing, typography, getStatCardWidth } from '../theme';
 
 export function LoadingView({ label = 'Loading...' }) {
-  return (
-    <View style={styles.centered}>
-      <ActivityIndicator size="large" color={colors.primary} />
-      <Text style={styles.muted}>{label}</Text>
-    </View>
-  );
+  return <PulseLoader label={label} />;
 }
 
 export function ErrorBanner({ message }) {
   if (!message) return null;
   return (
     <View style={styles.errorBanner}>
-      <Ionicons name="alert-circle" size={20} color={colors.danger} />
+      <View style={styles.bannerIconWrapDanger}>
+        <Ionicons name="alert-circle" size={18} color={colors.danger} />
+      </View>
       <Text style={styles.errorText}>{message}</Text>
     </View>
   );
@@ -34,7 +34,9 @@ export function SuccessBanner({ message }) {
   if (!message) return null;
   return (
     <View style={styles.successBanner}>
-      <Ionicons name="checkmark-circle" size={20} color={colors.success} />
+      <View style={styles.bannerIconWrapSuccess}>
+        <Ionicons name="checkmark-circle" size={18} color={colors.success} />
+      </View>
       <Text style={styles.successText}>{message}</Text>
     </View>
   );
@@ -44,10 +46,12 @@ export function Screen({ children, title, subtitle }) {
   return (
     <View style={styles.screen}>
       {title ? (
-        <View style={styles.header}>
-          <Text style={styles.title}>{title}</Text>
-          {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
-        </View>
+        <FadeInUp>
+          <View style={styles.header}>
+            <Text style={styles.title}>{title}</Text>
+            {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+          </View>
+        </FadeInUp>
       ) : null}
       <View style={styles.content}>{children}</View>
     </View>
@@ -56,17 +60,20 @@ export function Screen({ children, title, subtitle }) {
 
 export function SectionTitle({ title, action }) {
   return (
-    <View style={styles.sectionRow}>
-      <Text style={styles.sectionTitle}>{title}</Text>
-      {action}
-    </View>
+    <FadeInUp delay={80}>
+      <View style={styles.sectionRow}>
+        <Text style={styles.sectionTitle}>{title}</Text>
+        {action}
+      </View>
+    </FadeInUp>
   );
 }
 
-export function Card({ children, style, elevated = true }) {
-  return (
-    <View style={[styles.card, elevated && shadow('sm'), style]}>{children}</View>
+export function Card({ children, style, elevated = true, animated = false }) {
+  const inner = (
+    <View style={[styles.card, elevated && shadow('md'), style]}>{children}</View>
   );
+  return animated ? <FadeInUp>{inner}</FadeInUp> : inner;
 }
 
 export function InputField({
@@ -83,10 +90,11 @@ export function InputField({
   onSubmitEditing,
   autoCapitalize = 'none',
 }) {
+  const [focused, setFocused] = useState(false);
   return (
     <View style={styles.field}>
       {label ? <Text style={styles.label}>{label}</Text> : null}
-      <View style={[styles.inputWrap, multiline && styles.inputWrapMulti]}>
+      <View style={[styles.inputWrap, focused && styles.inputWrapFocused, multiline && styles.inputWrapMulti]}>
         <TextInput
           style={[styles.input, multiline && styles.inputMulti]}
           value={value}
@@ -96,38 +104,48 @@ export function InputField({
           secureTextEntry={secureTextEntry}
           keyboardType={keyboardType}
           multiline={multiline}
-          onFocus={onFocus}
+          onFocus={(e) => { setFocused(true); onFocus?.(e); }}
+          onBlur={() => setFocused(false)}
           returnKeyType={returnKeyType}
           onSubmitEditing={onSubmitEditing}
           autoCapitalize={autoCapitalize}
           autoCorrect={false}
+          blurOnSubmit={returnKeyType !== 'next'}
         />
         {rightElement}
       </View>
     </View>
   );
 }
-
 export function PrimaryButton({ title, onPress, disabled, loading, icon }) {
+  const content = loading ? (
+    <ActivityIndicator color="#fff" />
+  ) : (
+    <View style={styles.btnInner}>
+      {icon ? <Ionicons name={icon} size={20} color="#fff" /> : null}
+      <Text style={styles.primaryBtnText}>{title}</Text>
+    </View>
+  );
+
   return (
     <Pressable
       onPress={onPress}
       disabled={disabled || loading}
       style={({ pressed }) => [
-        styles.primaryBtn,
-        shadow('md'),
+        styles.primaryBtnOuter,
+        shadow('glow'),
         (disabled || loading) && styles.btnDisabled,
         pressed && !disabled && styles.btnPressed,
       ]}
     >
-      {loading ? (
-        <ActivityIndicator color="#fff" />
-      ) : (
-        <View style={styles.btnInner}>
-          {icon ? <Ionicons name={icon} size={20} color="#fff" /> : null}
-          <Text style={styles.primaryBtnText}>{title}</Text>
-        </View>
-      )}
+      <LinearGradient
+        colors={disabled ? [colors.border, colors.borderLight] : gradients.primary}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={[styles.primaryBtn, webGradient.primaryButton]}
+      >
+        {content}
+      </LinearGradient>
     </Pressable>
   );
 }
@@ -149,32 +167,32 @@ export function SecondaryButton({ title, onPress, disabled, danger }) {
   );
 }
 
-export function StatCard({ label, value, sub, icon, tone = 'default' }) {
+export function StatCard({ label, value, sub, icon, tone = 'default', delay = 0 }) {
   const { width } = useWindowDimensions();
   const cardWidth = getStatCardWidth(width);
   const toneStyles = {
-    default: { bg: colors.surface, icon: colors.primarySoft, iconColor: colors.primary },
-    brand: { bg: colors.primarySoft, icon: '#bfdbfe', iconColor: colors.primaryDark },
-    success: { bg: colors.successSoft, icon: '#bbf7d0', iconColor: colors.success },
-    warning: { bg: colors.warningSoft, icon: '#fde68a', iconColor: colors.warning },
+    default: { colors: ['#ffffff', '#f8fafc'], icon: colors.primarySoft, iconColor: colors.primary, accent: colors.primary },
+    brand: { colors: ['#f0fdfa', '#ccfbf1'], icon: '#99f6e4', iconColor: colors.primaryDark, accent: colors.primaryDark },
+    success: { colors: ['#ecfdf5', '#d1fae5'], icon: '#a7f3d0', iconColor: colors.success, accent: colors.success },
+    warning: { colors: ['#fffbeb', '#fef3c7'], icon: '#fde68a', iconColor: colors.warning, accent: colors.warning },
   }[tone];
 
   return (
-    <Card
-      style={[styles.statCard, { width: cardWidth }, { backgroundColor: toneStyles.bg }]}
-      elevated
-    >
-      <View style={styles.statTop}>
-        {icon ? (
-          <View style={[styles.statIcon, { backgroundColor: toneStyles.icon }]}>
-            <Ionicons name={icon} size={18} color={toneStyles.iconColor} />
-          </View>
-        ) : null}
-        <Text style={styles.statLabel}>{label}</Text>
-      </View>
-      <Text style={styles.statValue}>{value}</Text>
-      {sub ? <Text style={styles.statSub}>{sub}</Text> : null}
-    </Card>
+    <FadeInUp delay={delay} style={{ width: cardWidth }}>
+      <LinearGradient colors={toneStyles.colors} style={[styles.statCard, shadow('sm')]}>
+        <View style={[styles.statAccent, { backgroundColor: toneStyles.accent }]} />
+        <View style={styles.statTop}>
+          {icon ? (
+            <View style={[styles.statIcon, { backgroundColor: toneStyles.icon }]}>
+              <Ionicons name={icon} size={18} color={toneStyles.iconColor} />
+            </View>
+          ) : null}
+          <Text style={styles.statLabel}>{label}</Text>
+        </View>
+        <Text style={styles.statValue}>{value}</Text>
+        {sub ? <Text style={styles.statSub}>{sub}</Text> : null}
+      </LinearGradient>
+    </FadeInUp>
   );
 }
 
@@ -194,31 +212,26 @@ export function Badge({ label, tone = 'neutral' }) {
   );
 }
 
-export function QuickActionCard({ icon, label, sub, onPress }) {
+export function QuickActionCard({ icon, label, sub, onPress, delay = 0 }) {
   return (
-    <Pressable onPress={onPress} style={({ pressed }) => [styles.quickCard, pressed && styles.quickPressed]}>
-      <View style={styles.quickIcon}>
-        <Ionicons name={icon} size={22} color={colors.primary} />
-      </View>
-      <View style={styles.quickText}>
-        <Text style={styles.quickLabel}>{label}</Text>
-        {sub ? <Text style={styles.quickSub}>{sub}</Text> : null}
-      </View>
-      <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
-    </Pressable>
+    <FadeInUp delay={delay}>
+      <Pressable onPress={onPress} style={({ pressed }) => [styles.quickCard, shadow('sm'), pressed && styles.quickPressed]}>
+        <LinearGradient colors={['#f0fdfa', '#ffffff']} style={styles.quickIcon}>
+          <Ionicons name={icon} size={22} color={colors.primary} />
+        </LinearGradient>
+        <View style={styles.quickText}>
+          <Text style={styles.quickLabel}>{label}</Text>
+          {sub ? <Text style={styles.quickSub}>{sub}</Text> : null}
+        </View>
+        <View style={styles.quickChevron}>
+          <Ionicons name="chevron-forward" size={16} color={colors.primary} />
+        </View>
+      </Pressable>
+    </FadeInUp>
   );
 }
 
 const styles = StyleSheet.create({
-  centered: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: spacing.lg,
-    gap: spacing.md,
-    backgroundColor: colors.background,
-  },
-  muted: { color: colors.textMuted, fontSize: 14 },
   screen: { flex: 1, backgroundColor: colors.background },
   content: { flex: 1 },
   header: { paddingHorizontal: spacing.md, paddingTop: spacing.sm, paddingBottom: spacing.md },
@@ -229,14 +242,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     marginTop: spacing.sm,
+    marginBottom: spacing.xs,
   },
-  sectionTitle: { fontSize: 15, fontWeight: '700', color: colors.text },
+  sectionTitle: { fontSize: 16, fontWeight: '800', color: colors.text, letterSpacing: -0.2 },
   card: {
     backgroundColor: colors.card,
     borderRadius: radius.lg,
     borderWidth: Platform.OS === 'android' ? 0 : 1,
-    borderColor: colors.borderLight,
+    borderColor: 'rgba(226, 232, 240, 0.8)',
     padding: spacing.md,
+    overflow: 'hidden',
   },
   field: { gap: spacing.sm },
   label: { ...typography.label },
@@ -245,35 +260,40 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: colors.surface,
     borderRadius: radius.md,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: colors.border,
-    minHeight: 50,
+    minHeight: 52,
   },
-  inputWrapMulti: { alignItems: 'flex-start', minHeight: 88 },
+  inputWrapFocused: {
+    borderColor: colors.primary,
+    backgroundColor: '#feffff',
+    ...(Platform.OS === 'ios' ? shadow('sm') : {}),
+  },
+  inputWrapMulti: { alignItems: 'flex-start', minHeight: 96 },
   input: {
     flex: 1,
     paddingHorizontal: spacing.md,
-    paddingVertical: Platform.OS === 'android' ? 10 : 14,
+    paddingVertical: Platform.OS === 'android' ? 12 : 14,
     fontSize: 16,
     color: colors.text,
   },
-  inputMulti: { minHeight: 88, textAlignVertical: 'top', paddingTop: spacing.md },
+  inputMulti: { minHeight: 96, textAlignVertical: 'top', paddingTop: spacing.md },
+  primaryBtnOuter: { borderRadius: radius.md, overflow: 'hidden' },
   primaryBtn: {
-    backgroundColor: colors.primary,
     borderRadius: radius.md,
-    paddingVertical: Platform.OS === 'android' ? 14 : 16,
+    paddingVertical: Platform.OS === 'android' ? 15 : 17,
     alignItems: 'center',
-    minHeight: 52,
+    minHeight: 54,
     justifyContent: 'center',
   },
   btnInner: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  btnDisabled: { opacity: 0.55 },
-  btnPressed: { backgroundColor: colors.primaryDark },
+  btnDisabled: { opacity: 0.5 },
+  btnPressed: { opacity: 0.92, transform: [{ scale: 0.985 }] },
   btnPressedOpacity: { opacity: 0.88 },
-  primaryBtnText: { color: '#fff', fontWeight: '700', fontSize: 16 },
+  primaryBtnText: { color: '#fff', fontWeight: '700', fontSize: 16, letterSpacing: 0.2 },
   secondaryBtn: {
     borderRadius: radius.md,
-    paddingVertical: 12,
+    paddingVertical: 13,
     alignItems: 'center',
     borderWidth: 1.5,
     borderColor: colors.primary,
@@ -282,43 +302,70 @@ const styles = StyleSheet.create({
   secondaryDanger: { borderColor: colors.danger, backgroundColor: colors.dangerSoft },
   secondaryBtnText: { color: colors.primary, fontWeight: '700', fontSize: 15 },
   secondaryDangerText: { color: colors.danger },
-  statCard: { marginBottom: 0 },
-  statTop: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
+  statCard: {
+    borderRadius: radius.lg,
+    padding: spacing.md,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.8)',
+  },
+  statAccent: { position: 'absolute', top: 0, left: 0, right: 0, height: 3, opacity: 0.85 },
+  statTop: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 },
   statIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 10,
+    width: 36,
+    height: 36,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  statLabel: { fontSize: 12, color: colors.textMuted, fontWeight: '600', flex: 1 },
-  statValue: { fontSize: 24, fontWeight: '800', color: colors.text, marginTop: 4 },
-  statSub: { fontSize: 11, color: colors.textMuted, marginTop: 4 },
+  statLabel: { fontSize: 11, color: colors.textMuted, fontWeight: '700', flex: 1, textTransform: 'uppercase', letterSpacing: 0.6 },
+  statValue: { fontSize: 26, fontWeight: '800', color: colors.text, marginTop: 2, letterSpacing: -0.5 },
+  statSub: { fontSize: 11, color: colors.textMuted, marginTop: 6, fontWeight: '500' },
   errorBanner: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 10,
+    gap: 12,
     backgroundColor: colors.dangerSoft,
     borderRadius: radius.md,
     padding: spacing.md,
+    borderWidth: 1,
+    borderColor: '#fecdd3',
   },
-  errorText: { flex: 1, color: colors.danger, fontSize: 14, lineHeight: 20 },
+  bannerIconWrapDanger: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  errorText: { flex: 1, color: '#be123c', fontSize: 14, lineHeight: 20, fontWeight: '500' },
   successBanner: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 10,
+    gap: 12,
     backgroundColor: colors.successSoft,
     borderRadius: radius.md,
     padding: spacing.md,
+    borderWidth: 1,
+    borderColor: '#a7f3d0',
   },
-  successText: { flex: 1, color: colors.success, fontSize: 14, lineHeight: 20 },
+  bannerIconWrapSuccess: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  successText: { flex: 1, color: '#047857', fontSize: 14, lineHeight: 20, fontWeight: '500' },
   badge: {
     alignSelf: 'flex-start',
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: radius.pill,
   },
-  badgeText: { fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.3 },
+  badgeText: { fontSize: 10, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.5 },
   badgeSuccess: { backgroundColor: colors.successSoft },
   badgeWarning: { backgroundColor: colors.warningSoft },
   badgeDanger: { backgroundColor: colors.dangerSoft },
@@ -331,18 +378,26 @@ const styles = StyleSheet.create({
     borderRadius: radius.lg,
     padding: spacing.md,
     gap: spacing.md,
-    ...shadow('sm'),
+    borderWidth: 1,
+    borderColor: colors.borderLight,
   },
-  quickPressed: { opacity: 0.9 },
+  quickPressed: { opacity: 0.94, transform: [{ scale: 0.99 }] },
   quickIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    backgroundColor: colors.primarySoft,
+    width: 48,
+    height: 48,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
   },
   quickText: { flex: 1 },
   quickLabel: { fontSize: 16, fontWeight: '700', color: colors.text },
-  quickSub: { fontSize: 12, color: colors.textMuted, marginTop: 2 },
+  quickSub: { fontSize: 12, color: colors.textMuted, marginTop: 3 },
+  quickChevron: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    backgroundColor: colors.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 });

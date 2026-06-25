@@ -11,6 +11,7 @@ import systemRoutes from './routes/system.js';
 import fundRequestsRoutes from './routes/fundRequests.js';
 import walletRoutes from './routes/wallet.js';
 import notificationsRoutes from './routes/notifications.js';
+import publicRoutes from './routes/public.js';
 import { error } from './lib/response.js';
 
 const app = express();
@@ -70,6 +71,7 @@ app.get(['/api/v1', '/api/v1/'], (_req, res) => {
   });
 });
 
+app.use('/api/v1/public', publicRoutes);
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/workers', workersRoutes);
 app.use('/api/v1/distributors', distributorsRoutes);

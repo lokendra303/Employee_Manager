@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Platform } from 'react-native';
@@ -25,6 +26,17 @@ import SupervisorHomeScreen from '../screens/SupervisorHomeScreen';
 import DistributorDashboardScreen from '../screens/DistributorDashboardScreen';
 import NotificationsScreen from '../screens/NotificationsScreen';
 import ApiSettingsScreen from '../screens/ApiSettingsScreen';
+
+function SystemAdminApiSettings(props) {
+  const { user } = useAuth();
+  useEffect(() => {
+    if (user?.role !== 'SYSTEM_ADMIN') {
+      props.navigation.goBack();
+    }
+  }, [user, props.navigation]);
+  if (user?.role !== 'SYSTEM_ADMIN') return null;
+  return <ApiSettingsScreen {...props} />;
+}
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -58,16 +70,18 @@ function RoleTabs() {
         tabBarInactiveTintColor: colors.textMuted,
         tabBarLabelStyle: {
           fontSize: 11,
-          fontWeight: '600',
+          fontWeight: '700',
           marginBottom: Platform.OS === 'android' ? 2 : 0,
+          letterSpacing: 0.2,
         },
         tabBarStyle: {
           backgroundColor: colors.surface,
-          borderTopColor: colors.borderLight,
-          borderTopWidth: 1,
-          paddingTop: 6,
+          borderTopColor: 'transparent',
+          borderTopWidth: 0,
+          paddingTop: 8,
           ...tabBarStyle,
         },
+        tabBarItemStyle: { paddingVertical: 2 },
       }}
     >
       {tabs.map((tab) => (
@@ -161,7 +175,7 @@ export default function AppNavigator() {
       />
       <Stack.Screen
         name="ApiSettings"
-        component={ApiSettingsScreen}
+        component={SystemAdminApiSettings}
         options={{ title: 'API URL' }}
       />
     </Stack.Navigator>

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Icon } from '../components/ui';
 
@@ -7,8 +7,20 @@ export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
-  const { login, loading } = useAuth();
+  const { user, login, loading, bootstrapping } = useAuth();
   const navigate = useNavigate();
+
+  if (bootstrapping) {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-ink-500">
+        Loading...
+      </div>
+    );
+  }
+
+  if (user) {
+    return <Navigate to="/" replace />;
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -27,8 +39,8 @@ export default function Login() {
         <div className="absolute inset-0 bg-mesh opacity-60" />
         <div className="absolute top-20 left-20 w-72 h-72 bg-primary-500/20 rounded-full blur-3xl" />
         <div className="absolute bottom-10 right-10 w-96 h-96 bg-primary-600/10 rounded-full blur-3xl" />
-        <div className="relative z-10 max-w-md">
-          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-primary-400 to-primary-600 flex items-center justify-center shadow-glow mb-8">
+        <div className="relative z-10 max-w-md animate-fade-in-up">
+          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-primary-400 to-primary-600 flex items-center justify-center shadow-glow mb-8 animate-scale-in">
             <Icon name="calendar" className="w-8 h-8 text-white" />
           </div>
           <h1 className="text-4xl font-bold text-white leading-tight">
@@ -63,7 +75,7 @@ export default function Login() {
             </div>
           </div>
 
-          <div className="card-elevated p-6 sm:p-8">
+          <div className="card-elevated p-6 sm:p-8 animate-fade-in-up stagger-2">
             <h2 className="text-2xl font-bold text-ink-900 hidden lg:block">Welcome back</h2>
             <p className="text-ink-500 mt-1 hidden lg:block text-sm mb-6">Enter your credentials to access your dashboard</p>
 
@@ -108,6 +120,12 @@ export default function Login() {
               New organization?{' '}
               <Link to="/register" className="text-primary-600 font-semibold hover:text-primary-700">
                 Register here
+              </Link>
+            </p>
+
+            <p className="text-center text-sm text-ink-500 mt-3">
+              <Link to="/system-login" className="text-ink-600 font-medium hover:text-ink-800">
+                System administrator sign in
               </Link>
             </p>
           </div>

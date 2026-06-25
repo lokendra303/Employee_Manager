@@ -1,6 +1,16 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../../api/client';
+import {
+  Alert,
+  Avatar,
+  Badge,
+  EmptyState,
+  Icon,
+  LoadingState,
+  PageHeader,
+  StatCard,
+} from '../../components/ui';
 
 const emptyForm = {
   name: '',
@@ -18,15 +28,37 @@ const STATUS_FILTERS = [
   { value: 'INACTIVE', label: 'Inactive' },
 ];
 
-function StatusBadge({ status }) {
+function formatMoney(value) {
+  return `₹${(Number(value) || 0).toLocaleString()}`;
+}
+
+function AttendanceMiniBar({ monthAttendance }) {
+  const present = monthAttendance?.present || 0;
+  const halfDay = monthAttendance?.halfDay || 0;
+  const absent = monthAttendance?.absent || 0;
+  const total = present + halfDay + absent;
+
+  if (!total) {
+    return <p className="text-xs text-ink-400">No attendance this month</p>;
+  }
+
   return (
-    <span
-      className={`text-xs px-2 py-1 rounded-full font-medium ${
-        status === 'ACTIVE' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
-      }`}
-    >
-      {status === 'ACTIVE' ? 'Active' : 'Inactive'}
-    </span>
+    <div className="space-y-1.5">
+      <div className="flex h-2 rounded-full overflow-hidden bg-ink-100">
+        {present > 0 && (
+          <div className="bg-emerald-500" style={{ width: `${(present / total) * 100}%` }} title={`${present} present`} />
+        )}
+        {halfDay > 0 && (
+          <div className="bg-amber-400" style={{ width: `${(halfDay / total) * 100}%` }} title={`${halfDay} half day`} />
+        )}
+        {absent > 0 && (
+          <div className="bg-rose-400" style={{ width: `${(absent / total) * 100}%` }} title={`${absent} absent`} />
+        )}
+      </div>
+      <p className="text-[11px] text-ink-500">
+        {present}P · {halfDay}½ · {absent}A this month
+      </p>
+    </div>
   );
 }
 
@@ -40,6 +72,7 @@ export default function Workers() {
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('');
+  const [search, setSearch] = useState('');
 
   const load = async () => {
     try {
@@ -61,6 +94,28 @@ export default function Workers() {
     setLoading(true);
     load();
   }, [statusFilter]);
+
+  const filteredWorkers = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return workers;
+    return workers.filter(
+      (w) =>
+        w.name?.toLowerCase().includes(q) ||
+        w.distributor?.name?.toLowerCase().includes(q) ||
+        w.phone?.includes(q)
+    );
+  }, [workers, search]);
+
+  const totals = useMemo(() => {
+    return workers.reduce(
+      (acc, w) => ({
+        unpaid: acc.unpaid + (w.unpaidBalance || 0),
+        paid: acc.paid + (w.totalPaid || 0),
+        active: acc.active + (w.status === 'ACTIVE' ? 1 : 0),
+      }),
+      { unpaid: 0, paid: 0, active: 0 }
+    );
+  }, [workers]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -103,6 +158,13 @@ export default function Workers() {
     });
     setEditingId(worker.id);
     setShowForm(true);
+    setError('');
+  };
+
+  const closeForm = () => {
+    setShowForm(false);
+    setEditingId(null);
+    setForm(emptyForm);
   };
 
   const deactivate = async (worker) => {
@@ -128,60 +190,77 @@ export default function Workers() {
     }
   };
 
-  const activeCount = workers.filter((w) => w.status === 'ACTIVE').length;
-  const inactiveCount = workers.filter((w) => w.status === 'INACTIVE').length;
-
-  if (loading) return <div className="text-center py-12 text-gray-500">Loading...</div>;
+  if (loading) return <LoadingState label="Loading workers..." />;
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div>
-          <h2 className="text-xl font-bold">Workers</h2>
-          <p className="text-sm text-gray-500 mt-1">
-            Active workers appear in attendance & payments. Inactive workers are kept for records only.
-          </p>
-        </div>
-        <button
-          className="btn-primary"
-          onClick={() => {
-            setShowForm(!showForm);
-            setEditingId(null);
-            setForm(emptyForm);
-          }}
-        >
-          {showForm ? 'Cancel' : '+ Add Worker'}
-        </button>
+    <div className="page-shell space-y-6">
+      <PageHeader
+        badge="Workforce"
+        title="Workers"
+        subtitle="Track daily rates, pay cycles, attendance, and salary balances for every worker."
+        action={
+          <button type="button" className="btn-primary" onClick={() => (showForm ? closeForm() : setShowForm(true))}>
+            <Icon name="workers" className="w-4 h-4" />
+            {showForm ? 'Cancel' : 'Add Worker'}
+          </button>
+        }
+      />
+
+      {message && <Alert type="success">{message}</Alert>}
+      {error && <Alert type="error">{error}</Alert>}
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <StatCard
+          label="Active Workers"
+          value={totals.active}
+          sub={`${workers.length} total in list`}
+          variant="brand"
+          icon={<Icon name="workers" className="w-5 h-5" />}
+        />
+        <StatCard
+          label="Total Paid"
+          value={formatMoney(totals.paid)}
+          sub="Lifetime salary marked paid"
+          variant="success"
+          icon={<Icon name="check" className="w-5 h-5" />}
+        />
+        <StatCard
+          label="Unpaid Balance"
+          value={formatMoney(totals.unpaid)}
+          sub="Accrued, not yet paid"
+          variant="warning"
+          icon={<Icon name="banknote" className="w-5 h-5" />}
+        />
       </div>
 
-      {message && <div className="bg-green-50 text-green-700 px-4 py-3 rounded-lg text-sm">{message}</div>}
-      {error && <div className="bg-red-50 text-red-700 px-4 py-3 rounded-lg text-sm">{error}</div>}
-
-      <div className="flex flex-wrap gap-2">
-        {STATUS_FILTERS.map((f) => (
-          <button
-            key={f.value}
-            type="button"
-            onClick={() => setStatusFilter(f.value)}
-            className={`px-4 py-2 rounded-lg text-sm font-medium min-h-[44px] ${
-              statusFilter === f.value ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-600'
-            }`}
-          >
-            {f.label}
-            {f.value === 'ACTIVE' && statusFilter === '' && activeCount > 0 && (
-              <span className="ml-1 opacity-80">({activeCount})</span>
-            )}
-            {f.value === 'INACTIVE' && statusFilter === '' && inactiveCount > 0 && (
-              <span className="ml-1 opacity-80">({inactiveCount})</span>
-            )}
-          </button>
-        ))}
+      <div className="flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
+        <div className="flex flex-wrap gap-2">
+          {STATUS_FILTERS.map((f) => (
+            <button
+              key={f.value}
+              type="button"
+              onClick={() => setStatusFilter(f.value)}
+              className={`px-4 py-2 rounded-xl text-sm font-semibold transition ${
+                statusFilter === f.value
+                  ? 'bg-primary-600 text-white shadow-soft'
+                  : 'bg-white border border-ink-200 text-ink-600 hover:border-primary-200'
+              }`}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+        <input
+          className="input sm:max-w-xs"
+          placeholder="Search name, distributor, phone..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
       </div>
 
       {showForm && (
-        <form onSubmit={handleSubmit} className="card space-y-4">
-          <h3 className="font-semibold">{editingId ? 'Edit Worker' : 'New Worker'}</h3>
-
+        <form onSubmit={handleSubmit} className="card space-y-4 animate-fade-in">
+          <h3 className="font-semibold text-ink-900">{editingId ? 'Edit Worker' : 'New Worker'}</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="label">Name</label>
@@ -227,88 +306,81 @@ export default function Workers() {
               </div>
             )}
           </div>
-
           <button type="submit" className="btn-primary w-full sm:w-auto">
             {editingId ? 'Update Worker' : 'Create Worker'}
           </button>
         </form>
       )}
 
-      {workers.length === 0 ? (
-        <div className="card text-center text-gray-500 py-8">No workers found</div>
+      {filteredWorkers.length === 0 ? (
+        <EmptyState title="No workers found" description="Add a worker or adjust your filters." />
       ) : (
-        <>
-          <div className="space-y-3 md:hidden">
-            {workers.map((w) => (
-              <div key={w.id} className={`card ${w.status === 'INACTIVE' ? 'opacity-75' : ''}`}>
-                <div className="flex justify-between items-start">
-                  <div>
-                    <Link to={`/workers/${w.id}`} className="font-semibold text-primary-700 hover:underline">
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          {filteredWorkers.map((w) => (
+            <div
+              key={w.id}
+              className={`card-elevated flex flex-col gap-4 ${w.status === 'INACTIVE' ? 'opacity-75' : ''}`}
+            >
+              <div className="flex items-start gap-3">
+                <Avatar name={w.name} size="md" />
+                <div className="flex-1 min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Link to={`/workers/${w.id}`} className="font-bold text-lg text-ink-900 hover:text-primary-700 truncate">
                       {w.name}
                     </Link>
-                    <p className="text-sm text-gray-500">{w.distributor?.name}</p>
+                    <Badge tone={w.status === 'ACTIVE' ? 'success' : 'neutral'}>
+                      {w.status === 'ACTIVE' ? 'Active' : 'Inactive'}
+                    </Badge>
                   </div>
-                  <StatusBadge status={w.status} />
-                </div>
-                <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
-                  <div><span className="text-gray-500">Daily:</span> ₹{w.dailyRate}</div>
-                  <div><span className="text-gray-500">Pay cycle:</span> {w.payoutIntervalDays}d</div>
-                </div>
-                <p className="text-xs text-gray-400 mt-2">
-                  Period: {w.currentPeriod?.start} → {w.currentPeriod?.end}
-                </p>
-                <div className="flex gap-2 mt-3">
-                  <button className="btn-secondary flex-1" onClick={() => startEdit(w)}>Edit</button>
-                  {w.status === 'ACTIVE' ? (
-                    <button className="btn-danger flex-1" onClick={() => deactivate(w)}>Deactivate</button>
-                  ) : (
-                    <button className="btn-primary flex-1" onClick={() => reactivate(w)}>Reactivate</button>
-                  )}
+                  <p className="text-sm text-ink-500 mt-0.5">{w.distributor?.name || '—'}</p>
+                  {w.phone && <p className="text-xs text-ink-400 mt-0.5">{w.phone}</p>}
                 </div>
               </div>
-            ))}
-          </div>
 
-          <div className="hidden md:block card overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-gray-500 border-b">
-                  <th className="pb-3 pr-4">Name</th>
-                  <th className="pb-3 pr-4">Status</th>
-                  <th className="pb-3 pr-4">Daily Rate</th>
-                  <th className="pb-3 pr-4">Pay Cycle</th>
-                  <th className="pb-3 pr-4">Distributor</th>
-                  <th className="pb-3 pr-4">Current Period</th>
-                  <th className="pb-3">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {workers.map((w) => (
-                  <tr key={w.id} className={`border-b last:border-0 ${w.status === 'INACTIVE' ? 'opacity-60' : ''}`}>
-                    <td className="py-3 pr-4 font-medium">
-                      <Link to={`/workers/${w.id}`} className="text-primary-700 hover:underline">
-                        {w.name}
-                      </Link>
-                    </td>
-                    <td className="py-3 pr-4"><StatusBadge status={w.status} /></td>
-                    <td className="py-3 pr-4">₹{w.dailyRate}</td>
-                    <td className="py-3 pr-4">Every {w.payoutIntervalDays} days</td>
-                    <td className="py-3 pr-4">{w.distributor?.name}</td>
-                    <td className="py-3 pr-4 text-gray-500">{w.currentPeriod?.start} → {w.currentPeriod?.end}</td>
-                    <td className="py-3 space-x-2 whitespace-nowrap">
-                      <button className="text-primary-600 hover:underline" onClick={() => startEdit(w)}>Edit</button>
-                      {w.status === 'ACTIVE' ? (
-                        <button className="text-red-600 hover:underline" onClick={() => deactivate(w)}>Deactivate</button>
-                      ) : (
-                        <button className="text-green-600 hover:underline" onClick={() => reactivate(w)}>Reactivate</button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </>
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-100">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-700">Paid</p>
+                  <p className="font-bold text-emerald-800 tabular-nums mt-1">{formatMoney(w.totalPaid)}</p>
+                </div>
+                <div className="p-3 rounded-xl bg-amber-50 border border-amber-100">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-700">Remaining</p>
+                  <p className="font-bold text-amber-800 tabular-nums mt-1">{formatMoney(w.unpaidBalance)}</p>
+                </div>
+              </div>
+
+              <div>
+                <p className="text-xs font-semibold text-ink-500 uppercase tracking-wide mb-2">This Month</p>
+                <AttendanceMiniBar monthAttendance={w.monthAttendance} />
+              </div>
+
+              <div className="pt-3 border-t border-ink-100 grid grid-cols-2 gap-2 text-xs text-ink-500">
+                <span>₹{w.dailyRate}/day</span>
+                <span className="text-right">Pay every {w.payoutIntervalDays}d</span>
+                <span className="col-span-2 text-ink-400">
+                  Period {w.currentPeriod?.start} → {w.currentPeriod?.end}
+                </span>
+              </div>
+
+              <div className="flex gap-2 mt-auto">
+                <Link to={`/workers/${w.id}`} className="btn-primary flex-1 text-sm text-center">
+                  View History
+                </Link>
+                <button type="button" className="btn-secondary flex-1 text-sm" onClick={() => startEdit(w)}>
+                  Edit
+                </button>
+              </div>
+              {w.status === 'ACTIVE' ? (
+                <button type="button" className="text-xs text-rose-600 font-semibold hover:underline" onClick={() => deactivate(w)}>
+                  Deactivate worker
+                </button>
+              ) : (
+                <button type="button" className="text-xs text-emerald-600 font-semibold hover:underline" onClick={() => reactivate(w)}>
+                  Reactivate worker
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );

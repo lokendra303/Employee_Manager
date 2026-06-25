@@ -9,7 +9,9 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import api from '../api/client';
+import { useApiConfig } from '../context/ApiConfigContext';
 import {
   ErrorBanner,
   LoadingView,
@@ -22,7 +24,8 @@ import { colors } from '../theme';
 
 const FILTERS = ['PENDING', 'APPROVED', 'SUSPENDED', 'REJECTED'];
 
-export default function SystemAdminScreen() {
+export default function SystemAdminScreen({ navigation }) {
+  const { apiBaseUrl } = useApiConfig();
   const [stats, setStats] = useState(null);
   const [organizations, setOrganizations] = useState([]);
   const [filter, setFilter] = useState('PENDING');
@@ -32,6 +35,9 @@ export default function SystemAdminScreen() {
   const [suspendOrg, setSuspendOrg] = useState(null);
   const [suspendReason, setSuspendReason] = useState('');
   const [suspending, setSuspending] = useState(false);
+  const [rejectOrg, setRejectOrg] = useState(null);
+  const [rejectReason, setRejectReason] = useState('');
+  const [rejecting, setRejecting] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -74,6 +80,25 @@ export default function SystemAdminScreen() {
     }
   };
 
+  const submitReject = async () => {
+    if (!rejectOrg || rejectReason.trim().length < 3) return;
+    setRejecting(true);
+    setError('');
+    try {
+      await api.post(`/system/organizations/${rejectOrg.id}/reject`, {
+        reason: rejectReason.trim(),
+      });
+      setMessage('Organization rejected');
+      setRejectOrg(null);
+      setRejectReason('');
+      load();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setRejecting(false);
+    }
+  };
+
   const submitSuspend = async () => {
     if (!suspendOrg) return;
     setSuspending(true);
@@ -98,6 +123,15 @@ export default function SystemAdminScreen() {
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <Screen title="System Admin" subtitle="Approve, suspend, or reactivate organizations">
+        <Pressable style={styles.apiCard} onPress={() => navigation.navigate('ApiSettings')}>
+          <Ionicons name="server-outline" size={20} color={colors.primary} />
+          <View style={styles.apiCardText}>
+            <Text style={styles.apiCardLabel}>Global API URL</Text>
+            <Text style={styles.apiCardUrl} numberOfLines={1}>{apiBaseUrl || 'Not set'}</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+        </Pressable>
+
         <ErrorBanner message={error} />
         <SuccessBanner message={message} />
 
@@ -105,6 +139,8 @@ export default function SystemAdminScreen() {
           <StatCard label="Pending" value={String(stats?.pending ?? 0)} />
           <StatCard label="Approved" value={String(stats?.approved ?? 0)} />
           <StatCard label="Suspended" value={String(stats?.suspended ?? 0)} />
+          <StatCard label="Rejected" value={String(stats?.rejected ?? 0)} />
+          <StatCard label="Users" value={String(stats?.totalUsers ?? 0)} />
         </View>
 
         <View style={styles.filters}>
@@ -141,9 +177,14 @@ export default function SystemAdminScreen() {
                   <Text style={styles.reason}>Reason: {item.rejectedReason}</Text>
                 ) : null}
                 {item.status === 'PENDING' ? (
-                  <Pressable style={styles.approveBtn} onPress={() => approve(item.id)}>
-                    <Text style={styles.approveText}>Approve</Text>
-                  </Pressable>
+                  <View style={styles.actionRow}>
+                    <Pressable style={[styles.approveBtn, styles.actionBtn]} onPress={() => approve(item.id)}>
+                      <Text style={styles.approveText}>Approve</Text>
+                    </Pressable>
+                    <Pressable style={[styles.suspendBtn, styles.actionBtn]} onPress={() => setRejectOrg(item)}>
+                      <Text style={styles.suspendText}>Reject</Text>
+                    </Pressable>
+                  </View>
                 ) : null}
                 {item.status === 'APPROVED' ? (
                   <Pressable style={styles.suspendBtn} onPress={() => setSuspendOrg(item)}>
@@ -189,12 +230,59 @@ export default function SystemAdminScreen() {
           </View>
         </View>
       </Modal>
+
+      <Modal visible={!!rejectOrg} transparent animationType="slide">
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Reject {rejectOrg?.name}?</Text>
+            <Text style={styles.modalHint}>Provide a reason for the organization admin.</Text>
+            <Text style={styles.label}>Reason</Text>
+            <TextInput
+              style={styles.input}
+              value={rejectReason}
+              onChangeText={setRejectReason}
+              placeholder="e.g. Incomplete registration details"
+              multiline
+            />
+            <PrimaryButton
+              title="Reject"
+              onPress={submitReject}
+              loading={rejecting}
+              disabled={rejectReason.trim().length < 3}
+            />
+            <Pressable
+              style={styles.cancelBtn}
+              onPress={() => {
+                setRejectOrg(null);
+                setRejectReason('');
+              }}
+            >
+              <Text style={styles.cancelText}>Cancel</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
+  apiCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginHorizontal: 16,
+    marginBottom: 12,
+    padding: 14,
+    backgroundColor: '#eff6ff',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+  },
+  apiCardText: { flex: 1 },
+  apiCardLabel: { fontSize: 12, fontWeight: '600', color: colors.primary },
+  apiCardUrl: { fontSize: 12, color: colors.textMuted, marginTop: 2 },
   stats: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, paddingHorizontal: 16, marginBottom: 12 },
   filters: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingHorizontal: 16, marginBottom: 12 },
   filterBtn: {
@@ -218,8 +306,9 @@ const styles = StyleSheet.create({
   orgName: { fontWeight: '600', fontSize: 16, color: colors.text },
   orgMeta: { fontSize: 12, color: colors.textMuted, marginTop: 4 },
   reason: { fontSize: 12, color: colors.danger, marginTop: 8 },
+  actionRow: { flexDirection: 'row', gap: 8, marginTop: 10 },
+  actionBtn: { flex: 1, marginTop: 0 },
   approveBtn: {
-    marginTop: 10,
     backgroundColor: colors.success,
     borderRadius: 8,
     paddingVertical: 10,
@@ -227,7 +316,6 @@ const styles = StyleSheet.create({
   },
   approveText: { color: '#fff', fontWeight: '600' },
   suspendBtn: {
-    marginTop: 10,
     backgroundColor: colors.danger,
     borderRadius: 8,
     paddingVertical: 10,

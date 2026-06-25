@@ -159,15 +159,6 @@ router.post('/', requireRole('DISTRIBUTOR', 'SUPERVISOR'), async (req, res) => {
         ? await calculateSupervisorPaymentDue(req.user.id, req.user.organizationId)
         : await calculateDistributorPaymentDue(ctx.distributorId);
 
-    if (calculation.fundNeeded === 0) {
-      return error(
-        res,
-        'NO_PAYMENT_DUE',
-        'No worker payments or personal advance reimbursement is due right now',
-        400
-      );
-    }
-
     const request = await prisma.fundRequest.create({
       data: {
         organizationId: req.user.organizationId,
@@ -225,7 +216,6 @@ router.post('/', requireRole('DISTRIBUTOR', 'SUPERVISOR'), async (req, res) => {
 const approveSchema = z.object({
   approvedAmount: z.number().positive().optional(),
   notes: z.string().optional(),
-  acknowledgeMismatch: z.boolean().optional(),
 });
 
 router.get('/:id/verify', requireRole('ADMIN'), async (req, res) => {
@@ -269,21 +259,8 @@ router.post('/:id/approve', requireRole('ADMIN'), async (req, res) => {
       return error(res, 'INVALID_STATUS', 'Only pending requests can be approved', 400);
     }
 
-    const verification = await verifyFundRequest(fundRequest);
-    if (!verification.isCorrect && !data.acknowledgeMismatch) {
-      return error(
-        res,
-        'VERIFICATION_FAILED',
-        `${verification.message} Cross-verify and approve with acknowledgment if you still want to proceed.`,
-        409
-      );
-    }
-
-    const approvedAmount =
-      data.approvedAmount ??
-      (verification.isCorrect
-        ? Number(fundRequest.requestedAmount)
-        : verification.current.fundNeeded);
+    const approvedAmount = data.approvedAmount ?? Number(fundRequest.requestedAmount);
+    const requestedAmount = Number(fundRequest.requestedAmount);
 
     const updated = await prisma.fundRequest.update({
       where: { id },
@@ -303,11 +280,13 @@ router.post('/:id/approve', requireRole('ADMIN'), async (req, res) => {
       newValue: { approvedAmount },
     });
 
-    const approveBody = data.notes?.trim()
-      ? `Your fund request was approved for ${formatCurrency(approvedAmount)}. Note: ${data.notes.trim()}`
-      : `Your fund request was approved for ${formatCurrency(approvedAmount)}.`;
+    let approveBody =
+      approvedAmount === requestedAmount
+        ? `Your fund request was approved for ${formatCurrency(approvedAmount)}.`
+        : `Your fund request for ${formatCurrency(requestedAmount)} was approved for ${formatCurrency(approvedAmount)}.`;
 
     if (data.notes?.trim()) {
+      approveBody += ` Note: ${data.notes.trim()}`;
       await addFundRequestNote(id, req.user.id, data.notes);
     }
 
@@ -316,6 +295,11 @@ router.post('/:id/approve', requireRole('ADMIN'), async (req, res) => {
       title: 'Fund request approved',
       body: approveBody,
       userId: fundRequest.requestedById,
+      metadata: {
+        status: 'APPROVED',
+        requestedAmount,
+        approvedAmount,
+      },
     });
 
     return success(res, {

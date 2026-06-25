@@ -4,6 +4,11 @@ import prisma from '../lib/prisma.js';
 import { success, error } from '../lib/response.js';
 import { authenticate, requireRole } from '../middleware/auth.js';
 import { createAuditLog } from '../services/audit.js';
+import {
+  getPublicApiBaseUrl,
+  normalizeApiUrl,
+  setPublicApiBaseUrl,
+} from '../services/systemSettings.js';
 
 const router = Router();
 
@@ -178,6 +183,42 @@ router.post('/organizations/:id/reactivate', async (req, res) => {
     return success(res, updated);
   } catch (err) {
     return error(res, 'SERVER_ERROR', err.message, 500);
+  }
+});
+
+const apiUrlSchema = z.object({
+  apiBaseUrl: z.string().min(1),
+});
+
+router.get('/settings', async (_req, res) => {
+  try {
+    const apiBaseUrl = await getPublicApiBaseUrl();
+    return success(res, { apiBaseUrl });
+  } catch (err) {
+    return error(res, 'SERVER_ERROR', err.message, 500);
+  }
+});
+
+router.put('/settings/api-url', async (req, res) => {
+  try {
+    const { apiBaseUrl } = apiUrlSchema.parse(req.body);
+    const normalized = normalizeApiUrl(apiBaseUrl);
+    const updated = await setPublicApiBaseUrl(normalized, req.user.id);
+
+    await createAuditLog({
+      userId: req.user.id,
+      entityType: 'SystemSetting',
+      entityId: 0,
+      action: 'UPDATE_API_URL',
+      newValue: { apiBaseUrl: normalized },
+    });
+
+    return success(res, { apiBaseUrl: updated.value });
+  } catch (err) {
+    if (err.name === 'ZodError') {
+      return error(res, 'VALIDATION_ERROR', err.errors[0].message);
+    }
+    return error(res, 'VALIDATION_ERROR', err.message, 400);
   }
 });
 

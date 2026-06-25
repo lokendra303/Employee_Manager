@@ -13,7 +13,8 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.attendancemanager.app"
+      "bundleIdentifier": "com.attendancemanager.app",
+      "buildNumber": "1"
     },
     "android": {
       "package": "com.attendancemanager.app",

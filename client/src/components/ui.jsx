@@ -32,15 +32,15 @@ export function Icon({ name, className = 'w-5 h-5' }) {
 
 export function PageHeader({ title, subtitle, action, badge }) {
   return (
-    <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+    <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 animate-fade-in-up">
       <div>
         {badge && (
-          <span className="chip bg-primary-100 text-primary-700 mb-2">{badge}</span>
+          <span className="chip bg-primary-100 text-primary-700 mb-2 animate-scale-in">{badge}</span>
         )}
         <h1 className="text-2xl sm:text-3xl font-bold text-ink-900 tracking-tight">{title}</h1>
         {subtitle && <p className="text-ink-500 mt-1.5 text-sm sm:text-base max-w-xl">{subtitle}</p>}
       </div>
-      {action && <div className="shrink-0">{action}</div>}
+      {action && <div className="shrink-0 animate-fade-in stagger-2">{action}</div>}
     </div>
   );
 }
@@ -73,10 +73,10 @@ const STAT_VARIANTS = {
   },
 };
 
-export function StatCard({ label, value, sub, icon, variant = 'default' }) {
+export function StatCard({ label, value, sub, icon, variant = 'default', className = '' }) {
   const v = STAT_VARIANTS[variant] || STAT_VARIANTS.default;
   return (
-    <div className={`card p-4 sm:p-5 border ${v.wrap}`}>
+    <div className={`stat-card border transition-all duration-300 hover:-translate-y-1 hover:shadow-card ${v.wrap} ${className}`}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-xs font-semibold uppercase tracking-wider text-ink-500">{label}</p>
@@ -103,7 +103,7 @@ export function Alert({ type = 'info', children }) {
   const icons = { success: 'check', error: 'alert', warning: 'alert', info: 'spark' };
 
   return (
-    <div className={`flex gap-3 items-start px-4 py-3.5 rounded-xl border text-sm ${styles[type]}`}>
+    <div className={`flex gap-3 items-start px-4 py-3.5 rounded-xl border text-sm animate-fade-in-up ${styles[type]}`}>
       <Icon name={icons[type]} className="w-5 h-5 shrink-0 mt-0.5 opacity-80" />
       <div className="flex-1 leading-relaxed">{children}</div>
     </div>
@@ -126,8 +126,8 @@ export function Badge({ children, tone = 'neutral' }) {
 
 export function EmptyState({ title, description }) {
   return (
-    <div className="card text-center py-12 px-6">
-      <div className="w-14 h-14 rounded-2xl bg-ink-100 flex items-center justify-center mx-auto mb-4">
+    <div className="card text-center py-14 px-6 animate-scale-in">
+      <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary-100 to-primary-50 flex items-center justify-center mx-auto mb-4 shadow-soft">
         <Icon name="workers" className="w-7 h-7 text-ink-400" />
       </div>
       <p className="font-semibold text-ink-700">{title}</p>
@@ -138,9 +138,12 @@ export function EmptyState({ title, description }) {
 
 export function LoadingState({ label = 'Loading...' }) {
   return (
-    <div className="flex flex-col items-center justify-center py-16 gap-3">
-      <div className="w-10 h-10 rounded-full border-2 border-primary-200 border-t-primary-600 animate-spin" />
-      <p className="text-sm text-ink-500 font-medium">{label}</p>
+    <div className="flex flex-col items-center justify-center py-20 gap-4 animate-fade-in">
+      <div className="relative">
+        <div className="w-12 h-12 rounded-full border-[3px] border-primary-100 border-t-primary-500 border-r-teal-300 animate-spin" />
+        <div className="absolute inset-0 w-12 h-12 rounded-full border-2 border-transparent border-b-primary-300/40 animate-spin" style={{ animationDirection: 'reverse', animationDuration: '1.2s' }} />
+      </div>
+      <p className="text-sm text-ink-500 font-semibold tracking-wide">{label}</p>
     </div>
   );
 }

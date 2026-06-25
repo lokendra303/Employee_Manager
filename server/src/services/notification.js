@@ -80,7 +80,7 @@ export async function notifyFundRequestCreated(fundRequest, requester, note) {
   }, { excludeUserId: requester.id });
 }
 
-export async function notifyFundRequestStatus(fundRequest, { title, body, type, userId }) {
+export async function notifyFundRequestStatus(fundRequest, { title, body, type, userId, metadata }) {
   return createNotification({
     userId,
     organizationId: fundRequest.organizationId,
@@ -89,7 +89,7 @@ export async function notifyFundRequestStatus(fundRequest, { title, body, type, 
     body,
     entityType: 'FundRequest',
     entityId: fundRequest.id,
-    metadata: { status: fundRequest.status },
+    metadata: metadata ?? { status: fundRequest.status },
   });
 }
 

@@ -1,12 +1,13 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import bcrypt from 'bcryptjs';
 import prisma from '../lib/prisma.js';
 import { success, error } from '../lib/response.js';
 import { authenticate, requireRole, requireTenantUser } from '../middleware/auth.js';
 import { createAuditLog } from '../services/audit.js';
 import { getDistributorBalance } from '../services/payCycle.js';
 import { assertSupervisorAssigned, getDistributorForUser, assertDistributorAccess } from '../services/access.js';
-import { debitWallet, debitWalletPersonalAdvance, ensureWalletForUser } from '../services/wallet.js';
+import { debitWalletForDisbursement, ensureWalletForUser } from '../services/wallet.js';
 
 import { organizationFilter } from '../services/tenant.js';
 
@@ -18,6 +19,19 @@ const distributorSchema = z.object({
   contactEmail: z.string().email().optional().or(z.literal('')),
   openingBalance: z.number().optional(),
   userId: z.number().int().nullable().optional(),
+});
+
+const createLoginSchema = z.object({
+  name: z.string().min(1),
+  email: z.string().email(),
+  password: z.string().min(6),
+});
+
+const updateLoginSchema = z.object({
+  name: z.string().min(1).optional(),
+  email: z.string().email().optional(),
+  password: z.string().min(6).optional(),
+  isActive: z.boolean().optional(),
 });
 
 async function getDistributorPaymentStats(distributorId) {
@@ -57,6 +71,7 @@ async function enrichDistributor(d) {
           name: d.user.name,
           email: d.user.email,
           role: d.user.role,
+          isActive: d.user.isActive,
           isSupervisorDistributor: d.user.role === 'SUPERVISOR',
         }
       : null,
@@ -178,7 +193,7 @@ router.get('/:id', requireRole('ADMIN', 'DISTRIBUTOR'), async (req, res) => {
       where: { id, organizationId: req.user.organizationId },
       include: {
         _count: { select: { workers: true } },
-        user: { select: { id: true, name: true, email: true, role: true } },
+        user: { select: { id: true, name: true, email: true, role: true, isActive: true } },
         workers: {
           where: { status: 'ACTIVE' },
           select: { id: true, name: true, dailyRate: true, status: true },
@@ -274,6 +289,138 @@ router.put('/:id', requireRole('ADMIN'), async (req, res) => {
     if (err.code === 'NOT_FOUND') return error(res, 'NOT_FOUND', err.message, 404);
     if (err.code === 'VALIDATION') return error(res, 'VALIDATION_ERROR', err.message);
     if (err.code === 'DUPLICATE') return error(res, 'DUPLICATE', err.message, 409);
+    return error(res, 'SERVER_ERROR', err.message, 500);
+  }
+});
+
+router.post('/:id/login-account', requireRole('ADMIN'), async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const data = createLoginSchema.parse(req.body);
+
+    const distributor = await prisma.distributor.findFirst({
+      where: { id, organizationId: req.user.organizationId },
+    });
+    if (!distributor) return error(res, 'NOT_FOUND', 'Distributor not found', 404);
+    if (distributor.userId) {
+      return error(
+        res,
+        'VALIDATION_ERROR',
+        'This distributor already has a linked login. Edit the existing account or unlink it first.',
+        400
+      );
+    }
+
+    const passwordHash = await bcrypt.hash(data.password, 10);
+    const user = await prisma.user.create({
+      data: {
+        email: data.email.trim(),
+        passwordHash,
+        name: data.name.trim(),
+        role: 'DISTRIBUTOR',
+        organizationId: req.user.organizationId,
+      },
+    });
+
+    const updated = await prisma.distributor.update({
+      where: { id },
+      data: { userId: user.id },
+      include: {
+        _count: { select: { workers: true } },
+        user: { select: { id: true, name: true, email: true, role: true, isActive: true } },
+      },
+    });
+
+    await ensureWalletForUser(user, id);
+
+    await createAuditLog({
+      userId: req.user.id,
+      entityType: 'Distributor',
+      entityId: id,
+      action: 'CREATE_LOGIN',
+      newValue: { userId: user.id, email: user.email },
+    });
+
+    return success(res, await enrichDistributor(updated), 201);
+  } catch (err) {
+    if (err.name === 'ZodError') {
+      return error(res, 'VALIDATION_ERROR', err.errors[0].message);
+    }
+    if (err.code === 'P2002') {
+      return error(res, 'DUPLICATE', 'Email already exists');
+    }
+    return error(res, 'SERVER_ERROR', err.message, 500);
+  }
+});
+
+router.put('/:id/login-account', requireRole('ADMIN'), async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const data = updateLoginSchema.parse(req.body);
+
+    const distributor = await prisma.distributor.findFirst({
+      where: { id, organizationId: req.user.organizationId },
+      include: { user: true },
+    });
+    if (!distributor) return error(res, 'NOT_FOUND', 'Distributor not found', 404);
+    if (!distributor.user) {
+      return error(res, 'NOT_FOUND', 'No login account linked to this distributor', 404);
+    }
+    if (distributor.user.role !== 'DISTRIBUTOR') {
+      return error(
+        res,
+        'VALIDATION_ERROR',
+        'This distributor uses a supervisor login. Edit credentials on the Supervisors page.',
+        400
+      );
+    }
+
+    const updateData = {};
+    if (data.name !== undefined) updateData.name = data.name.trim();
+    if (data.email !== undefined) updateData.email = data.email.trim();
+    if (data.isActive !== undefined) updateData.isActive = data.isActive;
+    if (data.password) {
+      updateData.passwordHash = await bcrypt.hash(data.password, 10);
+    }
+
+    if (Object.keys(updateData).length === 0) {
+      return error(res, 'VALIDATION_ERROR', 'No fields to update');
+    }
+
+    await createAuditLog({
+      userId: req.user.id,
+      entityType: 'User',
+      entityId: distributor.user.id,
+      action: 'UPDATE',
+      oldValue: {
+        name: distributor.user.name,
+        email: distributor.user.email,
+        isActive: distributor.user.isActive,
+      },
+      newValue: updateData,
+    });
+
+    await prisma.user.update({
+      where: { id: distributor.user.id },
+      data: updateData,
+    });
+
+    const refreshed = await prisma.distributor.findFirst({
+      where: { id },
+      include: {
+        _count: { select: { workers: true } },
+        user: { select: { id: true, name: true, email: true, role: true, isActive: true } },
+      },
+    });
+
+    return success(res, await enrichDistributor(refreshed));
+  } catch (err) {
+    if (err.name === 'ZodError') {
+      return error(res, 'VALIDATION_ERROR', err.errors[0].message);
+    }
+    if (err.code === 'P2002') {
+      return error(res, 'DUPLICATE', 'Email already exists');
+    }
     return error(res, 'SERVER_ERROR', err.message, 500);
   }
 });
@@ -459,19 +606,20 @@ router.post('/:id/transactions', requireRole('ADMIN', 'DISTRIBUTOR', 'SUPERVISOR
       );
     }
 
-    if (req.user.role !== 'ADMIN') {
-      const distributor = await getDistributorForUser(req.user);
-      if (!distributor || distributor.id !== distributorId) {
-        return error(res, 'FORBIDDEN', 'Access denied', 403);
-      }
-    } else {
+    if (req.user.role === 'ADMIN') {
       const distributor = await prisma.distributor.findFirst({
         where: { id: distributorId, organizationId: req.user.organizationId },
       });
       if (!distributor) return error(res, 'FORBIDDEN', 'Access denied', 403);
-    }
-
-    if (req.user.role === 'SUPERVISOR') {
+    } else if (req.user.role === 'DISTRIBUTOR') {
+      const distributor = await getDistributorForUser(req.user);
+      if (!distributor || distributor.id !== distributorId) {
+        return error(res, 'FORBIDDEN', 'Access denied', 403);
+      }
+    } else if (req.user.role === 'SUPERVISOR') {
+      if (worker.distributorId !== distributorId) {
+        return error(res, 'FORBIDDEN', 'Worker is not under this distributor', 403);
+      }
       const assigned = await assertSupervisorAssigned(req.user.id, data.workerId);
       if (!assigned) {
         return error(res, 'FORBIDDEN', 'You can only pay workers assigned to you', 403);
@@ -487,21 +635,7 @@ router.post('/:id/transactions', requireRole('ADMIN', 'DISTRIBUTOR', 'SUPERVISOR
 
     let payerWallet = null;
     if (req.user.role !== 'ADMIN') {
-      const distributor = await getDistributorForUser(req.user);
-      payerWallet = await ensureWalletForUser(req.user, distributor?.id);
-    }
-
-    if (payerWallet && !paidFromPersonal) {
-      const { getWalletBalance } = await import('../services/wallet.js');
-      const walletBalance = await getWalletBalance(payerWallet.id);
-      if (data.amount > walletBalance) {
-        return error(
-          res,
-          'INSUFFICIENT_WALLET',
-          `Insufficient wallet balance. Available: ₹${walletBalance}. Enable "Paid from personal" if you paid from your own money.`,
-          400
-        );
-      }
+      payerWallet = await ensureWalletForUser(req.user);
     }
 
     const result = await prisma.$transaction(async (tx) => {
@@ -522,6 +656,7 @@ router.post('/:id/transactions', requireRole('ADMIN', 'DISTRIBUTOR', 'SUPERVISOR
         },
       });
 
+      let walletDebitResult = null;
       if (payerWallet) {
         const walletDebit = {
           walletId: payerWallet.id,
@@ -531,13 +666,10 @@ router.post('/:id/transactions', requireRole('ADMIN', 'DISTRIBUTOR', 'SUPERVISOR
           reference: data.paymentReference?.trim(),
           notes: paymentNotes,
           createdById: req.user.id,
+          forcePersonalAdvance: paidFromPersonal,
         };
 
-        if (paidFromPersonal) {
-          await debitWalletPersonalAdvance(tx, walletDebit);
-        } else {
-          await debitWallet(tx, walletDebit);
-        }
+        walletDebitResult = await debitWalletForDisbursement(tx, walletDebit);
       }
 
       const paymentResult = await applyPaymentToAccruals(tx, data.workerId, data.amount);
@@ -549,10 +681,12 @@ router.post('/:id/transactions', requireRole('ADMIN', 'DISTRIBUTOR', 'SUPERVISOR
         });
       }
 
-      return { record, paymentResult };
+      return { record, paymentResult, walletDebitResult };
     });
 
-    const { record: transaction, paymentResult } = result;
+    const { record: transaction, paymentResult, walletDebitResult } = result;
+    const usedPersonalAdvance =
+      paidFromPersonal || walletDebitResult?.usedPersonalAdvance || false;
 
     await createAuditLog({
       userId: req.user.id,
@@ -561,7 +695,8 @@ router.post('/:id/transactions', requireRole('ADMIN', 'DISTRIBUTOR', 'SUPERVISOR
       action: 'DISBURSEMENT',
       newValue: {
         ...data,
-        paidFromPersonal,
+        paidFromPersonal: usedPersonalAdvance,
+        personalAdvanceAmount: walletDebitResult?.personalAdvanceAmount ?? 0,
         isPartial: paymentResult.isPartial,
         applied: paymentResult.applied,
       },
@@ -578,7 +713,9 @@ router.post('/:id/transactions', requireRole('ADMIN', 'DISTRIBUTOR', 'SUPERVISOR
         ...transaction,
         amount: Number(transaction.amount),
         isPartial: paymentResult.isPartial,
-        paidFromPersonal,
+        paidFromPersonal: usedPersonalAdvance,
+        personalAdvanceAmount: walletDebitResult?.personalAdvanceAmount ?? 0,
+        walletAmountUsed: walletDebitResult?.walletAmount ?? 0,
         appliedToAccruals: paymentResult.applied,
         remainingBalance: Number(newBalance._sum.amount || 0),
       },

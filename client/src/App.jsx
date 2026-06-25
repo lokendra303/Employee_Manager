@@ -3,6 +3,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import RoleGuard from './components/RoleGuard';
 import Login from './pages/Login';
+import SystemAdminLogin from './pages/SystemAdminLogin';
 import RegisterOrganization from './pages/RegisterOrganization';
 import Dashboard from './pages/admin/Dashboard';
 import Workers from './pages/admin/Workers';
@@ -41,6 +42,7 @@ export default function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<Login />} />
+          <Route path="/system-login" element={<SystemAdminLogin />} />
           <Route path="/register" element={<RegisterOrganization />} />
 
           <Route element={<ProtectedRoute />}>
@@ -155,14 +157,6 @@ export default function App() {
               element={
                 <RoleGuard roles={['ADMIN', 'SYSTEM_ADMIN']}>
                   <Profile />
-                </RoleGuard>
-              }
-            />
-            <Route
-              path="/system"
-              element={
-                <RoleGuard roles={['SYSTEM_ADMIN']}>
-                  <SystemAdmin />
                 </RoleGuard>
               }
             />

@@ -151,18 +151,21 @@ export async function verifyFundRequest(fundRequest) {
   const requestedWithinDue = requestedAmount <= currentTotal;
   const requestedWithinFundNeeded = requestedAmount <= current.fundNeeded + 0.01;
 
-  let verificationStatus = 'CORRECT';
-  let message = 'Fund request matches current payment records.';
+  let verificationStatus = 'LOOKS_REASONABLE';
+  let message = 'Reference check: request aligns with current worker payment records.';
 
   if (!paymentDueMatch || !allWorkersMatch) {
     verificationStatus = 'PAYMENT_CHANGED';
-    message = 'Worker payment totals have changed since this request was submitted.';
+    message =
+      'Reference check: worker payment totals have changed since this request was submitted. Review if funds are still needed.';
   } else if (requestedAmount > currentTotal) {
     verificationStatus = 'OVER_REQUESTED';
-    message = 'Requested amount is higher than total payment due to workers.';
+    message =
+      'Reference check: requested amount is higher than current worker payment due. Admin may still approve a different amount.';
   } else if (!requestedWithinFundNeeded && current.fundNeeded < requestedAmount) {
     verificationStatus = 'EXCEEDS_FUND_NEEDED';
-    message = 'Requested amount exceeds the fund still needed after available balance.';
+    message =
+      'Reference check: requested amount exceeds suggested fund needed after wallet balance. Admin may still approve a different amount.';
   }
 
   const isCorrect =
