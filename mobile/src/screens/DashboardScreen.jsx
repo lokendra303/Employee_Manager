@@ -48,6 +48,13 @@ export default function DashboardScreen({ navigation }) {
           onPress={() => navigation.navigate('Workers')}
           delay={60}
         />
+        <QuickActionCard
+          icon="bar-chart-outline"
+          label="Reports"
+          sub="Days worked & balances"
+          onPress={() => navigation.getParent()?.navigate('AdminReports')}
+          delay={120}
+        />
       </View>
 
       <SectionTitle title="Overview" />

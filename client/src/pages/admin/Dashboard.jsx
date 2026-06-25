@@ -33,7 +33,7 @@ export default function Dashboard() {
         }
       />
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <Link
           to="/distributors?add=1"
           className="card-elevated flex items-center gap-4 p-5 hover:border-emerald-200 transition group"
@@ -56,6 +56,18 @@ export default function Dashboard() {
           <div>
             <p className="font-bold text-lg text-ink-900">Add Worker</p>
             <p className="text-sm text-ink-500 mt-0.5">Register employee and assign to a project</p>
+          </div>
+        </Link>
+        <Link
+          to="/reports"
+          className="card-elevated flex items-center gap-4 p-5 hover:border-violet-200 transition group sm:col-span-2 lg:col-span-1"
+        >
+          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-violet-100 to-violet-50 flex items-center justify-center">
+            <Icon name="chart" className="w-7 h-7 text-violet-700" />
+          </div>
+          <div>
+            <p className="font-bold text-lg text-ink-900">Reports</p>
+            <p className="text-sm text-ink-500 mt-0.5">Days worked, salary & project balances</p>
           </div>
         </Link>
       </div>

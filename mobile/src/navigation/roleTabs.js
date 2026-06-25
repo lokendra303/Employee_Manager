@@ -43,6 +43,7 @@ export function getTabsForUser(user) {
 export function getMoreLinks(user) {
   if (user?.role === 'ADMIN') {
     return [
+      { screen: 'AdminReports', title: 'Reports' },
       { screen: 'AdminDistributors', title: 'Projects / Sites' },
       { screen: 'AdminSupervisors', title: 'Supervisors' },
       { screen: 'AdminPayments', title: 'Payments' },
